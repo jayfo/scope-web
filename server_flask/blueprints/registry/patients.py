@@ -2,6 +2,7 @@ import copy
 import flask
 import flask_json
 import pymongo.collection
+import timeit
 
 import request_utils
 import request_context
@@ -34,6 +35,8 @@ def _construct_patient_document(
     patient_identity: dict,
     patient_collection: pymongo.collection.Collection,
 ) -> dict:
+    timeit_start = timeit.default_timer()
+
     patient_document = {}
 
     patient_document["_type"] = "patient"
@@ -42,7 +45,7 @@ def _construct_patient_document(
     patient_document["identity"] = copy.deepcopy(patient_identity)
 
     # Get multiple document types simultaneously
-    documents_by_type = scope.database.collection_utils.get_multiple_types(
+    result = scope.database.collection_utils.get_multiple_types(
         collection=patient_collection,
         singleton_types=[
             scope.database.patient.clinical_history.DOCUMENT_TYPE,
@@ -63,6 +66,8 @@ def _construct_patient_document(
             scope.database.patient.values.DOCUMENT_TYPE,
         ],
     )
+
+    documents_by_type = result["documents_by_type"]
 
     # Activities
     patient_document["activities"] = documents_by_type[
@@ -116,11 +121,13 @@ def _construct_patient_document(
 
     # Scheduled Assessments
     # TODO: this access currently modifies documents, cannot be replaced
+    timeit_step = timeit.default_timer()
     patient_document[
         "scheduledAssessments"
     ] = scope.database.patient.scheduled_assessments.get_scheduled_assessments(
         collection=patient_collection
     )
+    timeit_get_scheduled_assessments = timeit.default_timer() - timeit_step
 
     # Scheduled Activities
     patient_document["scheduledActivities"] = documents_by_type[
@@ -142,7 +149,16 @@ def _construct_patient_document(
         scope.database.patient.values_inventory.DOCUMENT_TYPE
     ]
 
-    return patient_document
+    timeit_total = timeit.default_timer() - timeit_start
+
+    return {
+        "patient_document": patient_document,
+        "_timing": {
+            "0 - total": format(timeit_total, 'f'),
+            "1 - get_multiple_types": result["_timing"],
+            "2 - get_scheduled_assessments": format(timeit_get_scheduled_assessments, 'f'),
+        }
+    }
 
 
 @patients_blueprint.route(
@@ -151,6 +167,8 @@ def _construct_patient_document(
 )
 @flask_json.as_json
 def get_patients():
+    timeit_start = timeit.default_timer()
+
     context = request_context.authorized_for_everything()
     database = context.database
 
@@ -161,20 +179,32 @@ def get_patients():
 
     # Construct a full patient document for each
     patient_documents = []
+    timing_construct_patient_document = []
     for patient_identity_current in patient_identities:
         patient_collection = database.get_collection(
             patient_identity_current["collection"]
         )
 
-        patient_documents.append(
-            _construct_patient_document(
-                patient_identity=patient_identity_current,
-                patient_collection=patient_collection,
-            )
+        result = _construct_patient_document(
+            patient_identity=patient_identity_current,
+            patient_collection=patient_collection,
         )
+
+        patient_documents.append(
+            result["patient_document"]
+        )
+        timing_construct_patient_document.append(
+            result["_timing"]
+        )
+
+    timeit_total = timeit.default_timer() - timeit_start
 
     return {
         "patients": patient_documents,
+        "_timing": {
+            "total": format(timeit_total, 'f'),
+            "_construct_patient_document": timing_construct_patient_document,
+        },
     }
 
 
@@ -184,6 +214,8 @@ def get_patients():
 )
 @flask_json.as_json
 def get_patient(patient_id):
+    timeit_start = timeit.default_timer()
+
     context = request_context.authorized_for_patient(patient_id=patient_id)
     database = context.database
 
@@ -198,13 +230,19 @@ def get_patient(patient_id):
     # Construct a full patient document
     patient_collection = database.get_collection(patient_identity["collection"])
 
-    patient_document = _construct_patient_document(
+    result = _construct_patient_document(
         patient_identity=patient_identity,
         patient_collection=patient_collection,
     )
 
+    timeit_total = timeit.default_timer() - timeit_start
+
     return {
-        "patient": patient_document,
+        "patient": result["patient_document"],
+        "_timing": {
+            "total": format(timeit_total, 'f'),
+            "_construct_patient_document": result["_timing"],
+        },
     }
 
 

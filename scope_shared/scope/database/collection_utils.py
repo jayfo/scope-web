@@ -2,6 +2,7 @@ import base64
 import copy
 from dataclasses import dataclass
 import hashlib
+import timeit
 import pymongo.collection
 import pymongo.errors
 from typing import Dict, List, Optional, Union
@@ -188,7 +189,10 @@ def get_multiple_types(
     collection: pymongo.collection.Collection,
     singleton_types: List[str],
     set_types: List[str],
-) -> Dict[str, Union[List[dict], Optional[dict]]]:
+# ) -> Dict[str, Union[List[dict], Optional[dict]]]:
+)-> dict:
+    timeit_start = timeit.default_timer()
+
     # Combine the document types
     combined_document_types = singleton_types + set_types
 
@@ -220,22 +224,28 @@ def get_multiple_types(
         documents_by_type[type_current] = []
 
     # Execute pipeline, obtain list of results
+    timeit_step = timeit.default_timer()
     with collection.aggregate(pipeline) as pipeline_result:
         # Confirm a result was found
         documents = []
         if pipeline_result.alive:
             documents = list(pipeline_result)
+    timeit_query = timeit.default_timer() - timeit_step
 
     # Put each document with its type
     # TODO this could probably be accomplished in the above query
+    timeit_step = timeit.default_timer()
     for document_current in documents:
         documents_by_type[document_current["_type"]].append(document_current)
+    timeit_bucket = timeit.default_timer() - timeit_step
 
     # Normalize each type's list of documents
+    timeit_step = timeit.default_timer()
     for type_current in combined_document_types:
         documents_by_type[type_current] = document_utils.normalize_documents(
             documents=documents_by_type[type_current]
         )
+    timeit_normalize = timeit.default_timer() - timeit_step
 
     # Restore singleton types to a single item instead of a list
     if singleton_types:
@@ -248,7 +258,17 @@ def get_multiple_types(
             else:
                 assert False
 
-    return documents_by_type
+    timeit_total = timeit.default_timer() - timeit_start
+
+    return {
+        "documents_by_type": documents_by_type,
+        "_timing": {
+            "0 - total": format(timeit_total, 'f'),
+            "1 - query": format(timeit_query, 'f'),
+            "2 - bucket": format(timeit_bucket, 'f'),
+            "3 - normalize": format(timeit_normalize, 'f'),
+        },
+    }
 
 
 def get_set(
