@@ -67,10 +67,12 @@ def _documentdb_client(
         # DocumentDB requires SSL, but port forwarding means the certificate will not match
         tls=True,
         tlsInsecure=tls_insecure,
+        # Compress network traffic
+        compressors="zstd",
         # PyMongo defaults to retryable writes, which are not supported by DocumentDB
         # https://docs.aws.amazon.com/documentdb/latest/developerguide/functional-differences.html#functional-differences.retryable-writes
         retryWrites=False,
-        # Connect as admin
+        # Connect with provided account
         username=user,
         password=password,
     )

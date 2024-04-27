@@ -49,6 +49,7 @@ jschon = "0.8.3"
 lorem = "0.1.1"
 pyzipper = "0.3.6"
 "ruamel.yaml" = "0.17.21"
+zstandard = "0.22.0"
 
 # These are not semver, pin a specific version.
 pytz = "2024.1"

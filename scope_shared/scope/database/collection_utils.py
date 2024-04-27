@@ -218,19 +218,22 @@ def get_multiple_types(
         {"$match": {"_deleted": {"$exists": False}}},
     ]
 
+    # Execute pipeline, obtain list of results
+    timeit_step = timeit.default_timer()
+    with collection.aggregate(pipeline, batchSize=16*1024*1024) as pipeline_result:
+        # Confirm a result was found
+        documents = []
+        timeit_query_initial = timeit.default_timer() - timeit_step
+        if pipeline_result.alive:
+            pipeline_result_len = len(pipeline_result._CommandCursor__data)
+            documents = list(pipeline_result)
+            documents_len = len(documents)
+    timeit_query_complete = timeit.default_timer() - timeit_step
+
     # Create a result dictionary with a key for each type
     documents_by_type = {}
     for type_current in combined_document_types:
         documents_by_type[type_current] = []
-
-    # Execute pipeline, obtain list of results
-    timeit_step = timeit.default_timer()
-    with collection.aggregate(pipeline) as pipeline_result:
-        # Confirm a result was found
-        documents = []
-        if pipeline_result.alive:
-            documents = list(pipeline_result)
-    timeit_query = timeit.default_timer() - timeit_step
 
     # Put each document with its type
     # TODO this could probably be accomplished in the above query
@@ -264,9 +267,12 @@ def get_multiple_types(
         "documents_by_type": documents_by_type,
         "_timing": {
             "0 - total": format(timeit_total, 'f'),
-            "1 - query": format(timeit_query, 'f'),
-            "2 - bucket": format(timeit_bucket, 'f'),
-            "3 - normalize": format(timeit_normalize, 'f'),
+            "1 - query_initial": format(timeit_query_initial, 'f'),
+            "2 - query_complete": format(timeit_query_complete, 'f'),
+            "3 - bucket": format(timeit_bucket, 'f'),
+            "4 - normalize": format(timeit_normalize, 'f'),
+            "documents_len": documents_len,
+            "pipeline_result_len": pipeline_result_len
         },
     }
 
