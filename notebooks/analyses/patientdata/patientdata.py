@@ -159,7 +159,8 @@ def export_dataframe_as_excel(
     path = path.with_suffix(path.suffix + ".xlsx")
 
     iobytes = io.BytesIO()
-    df.to_excel(iobytes, index=False)
+    # BytesIO works fine at runtime, but pandas does not list it as a valid excel_writer type.
+    df.to_excel(iobytes, index=False)  # type: ignore[arg-type]
     excel_bytes = iobytes.getvalue()
 
     export_file_list.append(
