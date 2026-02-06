@@ -2678,6 +2678,8 @@ with open(
                 ExportFileType.CSV,
                 ExportFileType.MARKDOWN,
             ]:
+                assert file_current.text is not None
+
                 archive_zipfile.writestr(
                     file_current.path.as_posix(), file_current.text.encode("utf-8")
                 )
