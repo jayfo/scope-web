@@ -355,6 +355,7 @@ def input_archive_suffix():
                 else "",
             )
             for match_current in archive_matches
+            if match_current is not None
         }
     )
 
