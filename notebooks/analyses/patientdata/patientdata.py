@@ -1308,9 +1308,12 @@ def transform_assessment(
     df_documents = df_documents.copy()
 
     # Medication tracking was never activated.
-    df_documents = df_documents[
-        (df_documents["_type"] != "assessment") |
-        ((df_documents["_type"] == "assessment") & (df_documents["assessmentId"] != "medication"))
+    df_documents = df_documents.loc[
+        (df_documents["_type"] != "assessment")
+        | (
+            (df_documents["_type"] == "assessment")
+            & (df_documents["assessmentId"] != "medication")
+        )
     ]
 
     return df_documents
