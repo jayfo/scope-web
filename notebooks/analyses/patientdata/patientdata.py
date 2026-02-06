@@ -1568,6 +1568,53 @@ def transform_case_review(
 
 
 # %% [markdown]
+# ### Documentation: Clinical History
+#
+# Exported from `clinicalHistory` documents. A single row is included for each `clinicalHistory`.
+#
+# Includes common fields documented in `commonFields.md`.
+
+# %% [markdown]
+# ### Transform: transform_clinical_history
+
+# %%
+def transform_clinical_history(
+    df_documents: pd.DataFrame,
+) -> pd.DataFrame:
+    # Expand currentTreatmentRegimen (cancerTreatmentRegimenFlags) into one column per flag.
+    def _factory_transform_current_treatment_regimen_key(keyJson):
+        def _transform_key(row):
+            if row["_type"] != "clinicalHistory":
+                return None
+            regimen = row.get("currentTreatmentRegimen")
+            if not isinstance(regimen, dict):
+                return None
+            return regimen.get(keyJson)
+
+        return _transform_key
+
+    currentTreatmentRegimenEnumMap = {
+        "Surgery": "currentTreatmentRegimenSurgery",
+        "Chemotherapy": "currentTreatmentRegimenChemotherapy",
+        "Radiation": "currentTreatmentRegimenRadiation",
+        "Stem Cell Transplant": "currentTreatmentRegimenStemCellTransplant",
+        "Immunotherapy": "currentTreatmentRegimenImmunotherapy",
+        "CAR-T": "currentTreatmentRegimenCART",
+        "Endocrine": "currentTreatmentRegimenEndocrine",
+        "Surveillance": "currentTreatmentRegimenSurveillance",
+        "Other": "currentTreatmentRegimenOtherFlag",
+    }
+
+    df_documents = df_documents.copy()
+    for (keyJson, keyExport) in currentTreatmentRegimenEnumMap.items():
+        df_documents[keyExport] = df_documents.apply(
+            _factory_transform_current_treatment_regimen_key(keyJson), axis=1
+        )
+
+    return df_documents
+
+
+# %% [markdown]
 # ### Documentation: Mood Logs
 #
 # Exported from `moodLog` documents. A single row is included for each `moodLog`.
@@ -1652,6 +1699,9 @@ def apply_transforms(
     df_documents = transform_case_review(
         df_documents,
     )
+    df_documents = transform_clinical_history(
+        df_documents,
+    )
     df_documents = transform_mood_log(
         df_documents,
     )
@@ -1734,6 +1784,7 @@ export_file_list: List[ExportFile] = []
 # - `assessments` is an export of all `assessment` documents. Documentation in `assessments.md`.
 # - `assessmentsGad7` is an export of all GAD-7 `assessmentLog` documents. Documentation in `assessmentLogs.md`.
 # - `assessmentsPhq9` is an export of all PHQ-9 `assessmentLog` documents. Documentation in `assessmentLogs.md`.
+# - `clinicalHistory` is an export of all `clinicalHistory` documents. Documentation in `clinicalHistory.md`.
 # - `moodLogs` is an export of all `moodLog` documents. Documentation in `moodLogs.md`.
 # - `values` is an export of all `value` documents. Documentation in `values.md`.
 #
@@ -2473,6 +2524,99 @@ def export_analysis_case_reviews():
 
 
 # %% [markdown]
+# ### Analysis: Clinical History
+
+# %%
+def export_analysis_clinical_history():
+    # Documentation of this analysis.
+    export_markdown(
+        pathlib.Path("clinicalHistory"),
+        documentation_as_markdown("Clinical History"),
+    )
+
+    # Preliminary documents.
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "clinicalHistory.raw",
+        ),
+        dataframe_format_export(
+            df_documents_raw.loc[
+                df_documents_raw["_type"] == "clinicalHistory"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "clinicalHistory.transformed",
+        ),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "clinicalHistory"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    # Formatted clinical history documents.
+    drop_columns = [
+        "_set_id",
+        "currentTreatmentRegimen",
+    ]
+    rename_columns = {
+        "_type": "_docType",
+        "_id": "_docId",
+    }
+    sort_columns = [
+        "_docType",
+        "recordId",
+        "_patientId",
+        "_docId",
+        "_rev",
+        "_created",
+        "primaryCancerDiagnosis",
+        "dateOfCancerDiagnosis",
+        "currentTreatmentRegimenSurgery",
+        "currentTreatmentRegimenChemotherapy",
+        "currentTreatmentRegimenRadiation",
+        "currentTreatmentRegimenStemCellTransplant",
+        "currentTreatmentRegimenImmunotherapy",
+        "currentTreatmentRegimenCART",
+        "currentTreatmentRegimenEndocrine",
+        "currentTreatmentRegimenSurveillance",
+        "currentTreatmentRegimenOtherFlag",
+        "currentTreatmentRegimenOther",
+        "currentTreatmentRegimenNotes",
+        "psychDiagnosis",
+        "pastPsychHistory",
+        "pastSubstanceUse",
+        "psychSocialBackground",
+    ]
+    sort_rows_by_columns = [
+        "recordId",
+        "_patientId",
+        "_rev",
+    ]
+
+    export_dataframe(
+        pathlib.Path("clinicalHistory"),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "clinicalHistory"
+            ],
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+
+# %% [markdown]
 # ### Analysis: Mood Logs
 
 # %%
@@ -2621,12 +2765,11 @@ def export_analysis_values():
 
 
 # %% [markdown]
-# ### Analysis: Run All Exports
+# ### Execute Exports
 #
 # Runs all analysis export functions defined above.
 #
 # Document types not yet exported:
-# - clinicalHistory
 # - patientIdentity
 # - patientProfile
 # - providerIdentity
@@ -2644,6 +2787,7 @@ export_analysis_activity_schedules()
 export_analysis_assessments()
 export_analysis_assessment_logs()
 export_analysis_case_reviews()
+export_analysis_clinical_history()
 export_analysis_mood_logs()
 export_analysis_values()
 
