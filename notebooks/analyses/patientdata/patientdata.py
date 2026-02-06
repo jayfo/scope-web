@@ -261,12 +261,17 @@ def dataframe_format_export(
     if drop_empty_columns:
         empty_columns = []
         for column_current in df.columns:
-            if (
+            is_empty = bool(
                 df[column_current].isnull().all()
                 or (
-                    df[column_current].astype(str).str.strip().isin(["", "nan", "None"])
-                ).all()
-            ):
+                    df[column_current]
+                    .astype(str)
+                    .str.strip()
+                    .isin(["", "nan", "None"])
+                    .all()
+                )
+            )
+            if is_empty:
                 empty_columns.append(column_current)
 
         df = df.drop(columns=empty_columns)
