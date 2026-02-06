@@ -301,7 +301,7 @@ def dataframe_format_export(
             if column_current not in sort_columns
         ]
 
-        df = df[sort_columns]
+        df = df.loc[:, sort_columns]
 
     # If requested, sort rows by specific columns.
     # Be robust to the possibility that a column is not present.
