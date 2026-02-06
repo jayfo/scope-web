@@ -2625,7 +2625,17 @@ def export_analysis_values():
 #
 # Runs all analysis export functions defined above.
 #
-# Document types not yet exported: clinicalHistory, contact, patientProfile, providerIdentity, referralStatus, reviewMark, safetyPlan, scheduledActivity, scheduledAssessment, session, valuesInventory.
+# Document types not yet exported:
+# - clinicalHistory
+# - patientIdentity
+# - patientProfile
+# - providerIdentity
+# - reviewMark
+# - safetyPlan
+# - scheduledActivity
+# - scheduledAssessment
+# - session
+# - valuesInventory
 
 # %%
 export_analysis_activities()
