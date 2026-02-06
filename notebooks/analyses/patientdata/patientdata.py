@@ -1912,7 +1912,7 @@ def export_analysis_activities():
             "activities.raw",
         ),
         dataframe_format_export(
-            df_documents_raw[(df_documents_raw["_type"] == "activity")],
+            df_documents_raw.loc[df_documents_raw["_type"] == "activity"],
             drop_empty_columns=True,
         ),
     )
@@ -1923,7 +1923,7 @@ def export_analysis_activities():
             "activities.transformed",
         ),
         dataframe_format_export(
-            df_documents[(df_documents["_type"] == "activity")],
+            df_documents.loc[df_documents["_type"] == "activity"],
             drop_empty_columns=True,
         ),
     )
@@ -1963,7 +1963,7 @@ def export_analysis_activities():
     export_dataframe(
         pathlib.Path("activities"),
         dataframe_format_export(
-            df_documents[(df_documents["_type"] == "activity")],
+            df_documents.loc[df_documents["_type"] == "activity"],
             drop_empty_columns=True,
             drop_columns=drop_columns,
             rename_columns=rename_columns,
@@ -1994,7 +1994,7 @@ def export_analysis_activity_logs():
             "activityLogs.raw",
         ),
         dataframe_format_export(
-            df_documents_raw[(df_documents_raw["_type"] == "activityLog")],
+            df_documents_raw.loc[df_documents_raw["_type"] == "activityLog"],
             drop_empty_columns=True,
         ),
     )
@@ -2005,7 +2005,7 @@ def export_analysis_activity_logs():
             "activityLogs.transformed",
         ),
         dataframe_format_export(
-            df_documents[(df_documents["_type"] == "activityLog")],
+            df_documents.loc[df_documents["_type"] == "activityLog"],
             drop_empty_columns=True,
         ),
     )
@@ -2054,7 +2054,7 @@ def export_analysis_activity_logs():
     export_dataframe(
         pathlib.Path("activityLogs"),
         dataframe_format_export(
-            df_documents[(df_documents["_type"] == "activityLog")],
+            df_documents.loc[df_documents["_type"] == "activityLog"],
             drop_empty_columns=True,
             drop_columns=drop_columns,
             rename_columns=rename_columns,
@@ -2085,7 +2085,7 @@ def export_analysis_activity_schedules():
             "activitySchedules.raw",
         ),
         dataframe_format_export(
-            df_documents_raw[(df_documents_raw["_type"] == "activitySchedule")],
+            df_documents_raw.loc[df_documents_raw["_type"] == "activitySchedule"],
             drop_empty_columns=True,
         ),
     )
@@ -2096,7 +2096,7 @@ def export_analysis_activity_schedules():
             "activitySchedules.transformed",
         ),
         dataframe_format_export(
-            df_documents[(df_documents["_type"] == "activitySchedule")],
+            df_documents.loc[df_documents["_type"] == "activitySchedule"],
             drop_empty_columns=True,
         ),
     )
@@ -2146,7 +2146,7 @@ def export_analysis_activity_schedules():
     export_dataframe(
         pathlib.Path("activitySchedules"),
         dataframe_format_export(
-            df_documents[(df_documents["_type"] == "activitySchedule")],
+            df_documents.loc[df_documents["_type"] == "activitySchedule"],
             drop_empty_columns=True,
             drop_columns=drop_columns,
             rename_columns=rename_columns,
@@ -2177,8 +2177,8 @@ def export_analysis_assessments():
             "assessments.raw",
         ),
         dataframe_format_export(
-            df_documents_raw[
-                (df_documents_raw["_type"] == "assessment")
+            df_documents_raw.loc[
+                df_documents_raw["_type"] == "assessment"
             ],
             drop_empty_columns=True,
         ),
@@ -2190,8 +2190,8 @@ def export_analysis_assessments():
             "assessments.transformed",
         ),
         dataframe_format_export(
-            df_documents[
-                (df_documents["_type"] == "assessment")
+            df_documents.loc[
+                df_documents["_type"] == "assessment"
             ],
             drop_empty_columns=True,
         ),
@@ -2228,8 +2228,8 @@ def export_analysis_assessments():
     export_dataframe(
         pathlib.Path("assessments"),
         dataframe_format_export(
-            df_documents[
-                (df_documents["_type"] == "assessment")
+            df_documents.loc[
+                df_documents["_type"] == "assessment"
             ],
             drop_empty_columns=True,
             drop_columns=drop_columns,
@@ -2261,7 +2261,7 @@ def export_analysis_assessment_logs():
             "assessmentLogsGad7.raw",
         ),
         dataframe_format_export(
-            df_documents_raw[
+            df_documents_raw.loc[
                 (df_documents_raw["_type"] == "assessmentLog")
                 & (df_documents_raw["assessmentId"] == "gad-7")
             ],
@@ -2275,7 +2275,7 @@ def export_analysis_assessment_logs():
             "assessmentLogsGad7.transformed",
         ),
         dataframe_format_export(
-            df_documents[
+            df_documents.loc[
                 (df_documents["_type"] == "assessmentLog")
                 & (df_documents["assessmentId"] == "gad-7")
             ],
@@ -2290,7 +2290,7 @@ def export_analysis_assessment_logs():
             "assessmentLogsPhq9.raw",
         ),
         dataframe_format_export(
-            df_documents_raw[
+            df_documents_raw.loc[
                 (df_documents_raw["_type"] == "assessmentLog")
                 & (df_documents_raw["assessmentId"] == "phq-9")
             ],
@@ -2304,7 +2304,7 @@ def export_analysis_assessment_logs():
             "assessmentLogsPhq9.transformed",
         ),
         dataframe_format_export(
-            df_documents[
+            df_documents.loc[
                 (df_documents["_type"] == "assessmentLog")
                 & (df_documents["assessmentId"] == "phq-9")
             ],
@@ -2372,7 +2372,7 @@ def export_analysis_assessment_logs():
     export_dataframe(
         pathlib.Path("assessmentLogsGad7"),
         dataframe_format_export(
-            df_documents[
+            df_documents.loc[
                 (df_documents["_type"] == "assessmentLog")
                 & (df_documents["assessmentId"] == "gad-7")
             ],
@@ -2387,7 +2387,7 @@ def export_analysis_assessment_logs():
     export_dataframe(
         pathlib.Path("assessmentLogsPhq9"),
         dataframe_format_export(
-            df_documents[
+            df_documents.loc[
                 (df_documents["_type"] == "assessmentLog")
                 & (df_documents["assessmentId"] == "phq-9")
             ],
@@ -2421,8 +2421,8 @@ def export_case_reviews():
             "caseReviews.raw",
         ),
         dataframe_format_export(
-            df_documents_raw[
-                (df_documents_raw["_type"] == "caseReview")
+            df_documents_raw.loc[
+                df_documents_raw["_type"] == "caseReview"
             ],
             drop_empty_columns=True,
         ),
@@ -2434,8 +2434,8 @@ def export_case_reviews():
             "caseReviews.transformed",
         ),
         dataframe_format_export(
-            df_documents[
-                (df_documents["_type"] == "caseReview")
+            df_documents.loc[
+                df_documents["_type"] == "caseReview"
             ],
             drop_empty_columns=True,
         ),
@@ -2477,8 +2477,8 @@ def export_case_reviews():
     export_dataframe(
         pathlib.Path("caseReviews"),
         dataframe_format_export(
-            df_documents[
-                (df_documents["_type"] == "caseReview")
+            df_documents.loc[
+                df_documents["_type"] == "caseReview"
             ],
             drop_empty_columns=True,
             drop_columns=drop_columns,
@@ -2510,7 +2510,7 @@ def export_analysis_mood_logs():
             "moodLogs.raw",
         ),
         dataframe_format_export(
-            df_documents_raw[(df_documents_raw["_type"] == "moodLog")],
+            df_documents_raw.loc[df_documents_raw["_type"] == "moodLog"],
             drop_empty_columns=True,
         ),
     )
@@ -2521,7 +2521,7 @@ def export_analysis_mood_logs():
             "moodLogs.transformed",
         ),
         dataframe_format_export(
-            df_documents[(df_documents["_type"] == "moodLog")],
+            df_documents.loc[df_documents["_type"] == "moodLog"],
             drop_empty_columns=True,
         ),
     )
@@ -2555,7 +2555,7 @@ def export_analysis_mood_logs():
     export_dataframe(
         pathlib.Path("moodLogs"),
         dataframe_format_export(
-            df_documents[(df_documents["_type"] == "moodLog")],
+            df_documents.loc[df_documents["_type"] == "moodLog"],
             drop_empty_columns=True,
             drop_columns=drop_columns,
             rename_columns=rename_columns,
@@ -2586,7 +2586,7 @@ def export_analysis_values():
             "values.raw",
         ),
         dataframe_format_export(
-            df_documents_raw[(df_documents_raw["_type"] == "value")],
+            df_documents_raw.loc[df_documents_raw["_type"] == "value"],
             drop_empty_columns=True,
         ),
     )
@@ -2597,7 +2597,7 @@ def export_analysis_values():
             "values.transformed",
         ),
         dataframe_format_export(
-            df_documents[(df_documents["_type"] == "value")],
+            df_documents.loc[df_documents["_type"] == "value"],
             drop_empty_columns=True,
         ),
     )
@@ -2633,7 +2633,7 @@ def export_analysis_values():
     export_dataframe(
         pathlib.Path("values"),
         dataframe_format_export(
-            df_documents[(df_documents["_type"] == "value")],
+            df_documents.loc[df_documents["_type"] == "value"],
             drop_empty_columns=True,
             drop_columns=drop_columns,
             rename_columns=rename_columns,
