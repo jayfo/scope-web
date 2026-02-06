@@ -229,7 +229,7 @@ def export_markdown(
 # %%
 def dataframe_sanitize(df: pd.DataFrame) -> pd.DataFrame:
     def sanitize_cell(value):
-        if type(value) == str:
+        if isinstance(value, str):
             value = ILLEGAL_CHARACTERS_RE.sub("?", value)
 
         return value
