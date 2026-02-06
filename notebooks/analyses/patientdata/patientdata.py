@@ -572,7 +572,7 @@ df_archive_patients = df_archive_patients_raw.copy()
 
 # %%
 df_archive_patients = df_archive_patients.drop(
-    df_archive_patients[
+    index=df_archive_patients[
         df_archive_patients["patientId"].isin(
             [
                 "ymzwx6e6w6kqi",
@@ -583,7 +583,7 @@ df_archive_patients = df_archive_patients.drop(
                 "s3bcmgmp7gdss",
             ]
         )
-    ].index
+    ].index.tolist()
 ).reset_index(drop=True)
 
 # %% [markdown]
