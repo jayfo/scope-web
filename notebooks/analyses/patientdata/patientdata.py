@@ -1971,9 +1971,6 @@ def export_analysis_activities():
     )
 
 
-export_analysis_activities()
-
-
 # %% [markdown]
 # ### Analysis: Activity Logs
 
@@ -2060,9 +2057,6 @@ def export_analysis_activity_logs():
             sort_rows_by_columns=sort_rows_by_columns,
         ),
     )
-
-
-export_analysis_activity_logs()
 
 
 # %% [markdown]
@@ -2154,9 +2148,6 @@ def export_analysis_activity_schedules():
     )
 
 
-export_analysis_activity_schedules()
-
-
 # %% [markdown]
 # ### Analysis: Assessments
 
@@ -2236,9 +2227,6 @@ def export_analysis_assessments():
             sort_rows_by_columns=sort_rows_by_columns,
         ),
     )
-
-
-export_analysis_assessments()
 
 
 # %% [markdown]
@@ -2398,14 +2386,11 @@ def export_analysis_assessment_logs():
     )
 
 
-export_analysis_assessment_logs()
-
-
 # %% [markdown]
 # ### Analysis: Case Reviews
 
 # %%
-def export_case_reviews():
+def export_analysis_case_reviews():
     # Documentation of this analysis.
     export_markdown(
         pathlib.Path("caseReviews"),
@@ -2487,9 +2472,6 @@ def export_case_reviews():
     )
 
 
-export_case_reviews()
-
-
 # %% [markdown]
 # ### Analysis: Mood Logs
 
@@ -2561,9 +2543,6 @@ def export_analysis_mood_logs():
             sort_rows_by_columns=sort_rows_by_columns,
         ),
     )
-
-
-export_analysis_mood_logs()
 
 
 # %% [markdown]
@@ -2641,6 +2620,21 @@ def export_analysis_values():
     )
 
 
+# %% [markdown]
+# ### Analysis: Run All Exports
+#
+# Runs all analysis export functions defined above.
+#
+# Document types not yet exported: clinicalHistory, contact, patientProfile, providerIdentity, referralStatus, reviewMark, safetyPlan, scheduledActivity, scheduledAssessment, session, valuesInventory.
+
+# %%
+export_analysis_activities()
+export_analysis_activity_logs()
+export_analysis_activity_schedules()
+export_analysis_assessments()
+export_analysis_assessment_logs()
+export_analysis_case_reviews()
+export_analysis_mood_logs()
 export_analysis_values()
 
 # %% [markdown]
