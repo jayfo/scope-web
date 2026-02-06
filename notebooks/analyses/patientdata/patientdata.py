@@ -85,9 +85,7 @@ def documentation_as_markdown(documentation_name: str) -> str:
 
     # Go through each cell, looking for a match.
     for cell_current in notebook["cells"]:
-        match = True
-        if match:
-            match = cell_current["cell_type"] == "markdown"
+        match = cell_current["cell_type"] == "markdown"
         if match:
             match = re.match(
                 "^(#*) Documentation: ({})\\n(.*)".format(documentation_name),
