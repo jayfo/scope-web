@@ -1762,6 +1762,24 @@ def transform_safety_plan(
 
 
 # %% [markdown]
+# ### Documentation: Scheduled Assessment
+#
+# Exported from `scheduledAssessment` documents. A single row is included for each `scheduledAssessment`.
+#
+# Includes common fields documented in `commonFields.md`.
+
+# %% [markdown]
+# ### Transform: transform_scheduled_assessment
+
+# %%
+def transform_scheduled_assessment(
+    df_documents: pd.DataFrame,
+) -> pd.DataFrame:
+    # No transformations are needed.
+    return df_documents
+
+
+# %% [markdown]
 # ### Documentation: Session
 #
 # Exported from `session` documents. A single row is included for each `session`.
@@ -1929,6 +1947,9 @@ def apply_transforms(
     df_documents = transform_safety_plan(
         df_documents,
     )
+    df_documents = transform_scheduled_assessment(
+        df_documents,
+    )
     df_documents = transform_session(
         df_documents,
     )
@@ -2019,6 +2040,7 @@ export_file_list: List[ExportFile] = []
 # - `patientProfiles` is an export of all `profile` documents. Documentation in `patientProfiles.md`.
 # - `reviewMarks` is an export of all `reviewMark` documents. Documentation in `reviewMarks.md`.
 # - `safetyPlans` is an export of all `safetyPlan` documents. Documentation in `safetyPlans.md`.
+# - `scheduledAssessments` is an export of all `scheduledAssessment` documents. Documentation in `scheduledAssessments.md`.
 # - `sessions` is an export of all `session` documents. Documentation in `sessions.md`.
 # - `values` is an export of all `value` documents. Documentation in `values.md`.
 # - `valuesInventories` is an export of all `valuesInventory` documents. Documentation in `valuesInventories.md`.
@@ -3191,6 +3213,91 @@ def export_analysis_safety_plan():
 
 
 # %% [markdown]
+# ### Analysis: Scheduled Assessment
+
+# %%
+def export_analysis_scheduled_assessment():
+    # Documentation of this analysis.
+    export_markdown(
+        pathlib.Path("scheduledAssessments"),
+        documentation_as_markdown("Scheduled Assessment"),
+    )
+
+    # Preliminary documents.
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "scheduledAssessments.raw",
+        ),
+        dataframe_format_export(
+            df_documents_raw.loc[
+                df_documents_raw["_type"] == "scheduledAssessment"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "scheduledAssessments.transformed",
+        ),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "scheduledAssessment"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    # Formatted scheduled assessment documents.
+    drop_columns = [
+        "_set_id",
+    ]
+    rename_columns = {
+        "_type": "_docType",
+        "_id": "_docId",
+    }
+    sort_columns = [
+        "_docType",
+        "recordId",
+        "_patientId",
+        "_docId",
+        "scheduledAssessmentId",
+        "_rev",
+        "_created",
+        "_deleted",
+        "assessmentId",
+        "dueDate",
+        "dueTimeOfDay",
+        "dueDateTime",
+        "reminderDate",
+        "reminderTimeOfDay",
+        "reminderDateTime",
+        "completed",
+    ]
+    sort_rows_by_columns = [
+        "recordId",
+        "_patientId",
+        "_created",
+    ]
+
+    export_dataframe(
+        pathlib.Path("scheduledAssessments"),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "scheduledAssessment"
+            ],
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+
+# %% [markdown]
 # ### Analysis: Session
 
 # %%
@@ -3451,7 +3558,6 @@ def export_analysis_values_inventory():
 #
 # Document types not yet exported:
 # - scheduledActivity
-# - scheduledAssessment
 
 # %%
 export_analysis_activities()
@@ -3465,6 +3571,7 @@ export_analysis_mood_logs()
 export_analysis_patient_profile()
 export_analysis_review_mark()
 export_analysis_safety_plan()
+export_analysis_scheduled_assessment()
 export_analysis_session()
 export_analysis_values()
 export_analysis_values_inventory()
