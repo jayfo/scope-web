@@ -1744,6 +1744,24 @@ def transform_review_mark(
 
 
 # %% [markdown]
+# ### Documentation: Safety Plan
+#
+# Exported from `safetyPlan` documents. A single row is included for each `safetyPlan`.
+#
+# Includes common fields documented in `commonFields.md`.
+
+# %% [markdown]
+# ### Transform: transform_safety_plan
+
+# %%
+def transform_safety_plan(
+    df_documents: pd.DataFrame,
+) -> pd.DataFrame:
+    # No transformations are needed.
+    return df_documents
+
+
+# %% [markdown]
 # ### Documentation: Values
 #
 # Exported from `value` documents. A single row is included for each `value`.
@@ -1816,6 +1834,9 @@ def apply_transforms(
         df_documents,
     )
     df_documents = transform_review_mark(
+        df_documents,
+    )
+    df_documents = transform_safety_plan(
         df_documents,
     )
     df_documents = transform_value(
@@ -1901,6 +1922,7 @@ export_file_list: List[ExportFile] = []
 # - `moodLogs` is an export of all `moodLog` documents. Documentation in `moodLogs.md`.
 # - `patientProfiles` is an export of all `profile` documents. Documentation in `patientProfiles.md`.
 # - `reviewMarks` is an export of all `reviewMark` documents. Documentation in `reviewMarks.md`.
+# - `safetyPlans` is an export of all `safetyPlan` documents. Documentation in `safetyPlans.md`.
 # - `values` is an export of all `value` documents. Documentation in `values.md`.
 #
 # Several of the above data types are related.
@@ -2984,6 +3006,93 @@ def export_analysis_review_mark():
 
 
 # %% [markdown]
+# ### Analysis: Safety Plan
+
+# %%
+def export_analysis_safety_plan():
+    # Documentation of this analysis.
+    export_markdown(
+        pathlib.Path("safetyPlans"),
+        documentation_as_markdown("Safety Plan"),
+    )
+
+    # Preliminary documents.
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "safetyPlans.raw",
+        ),
+        dataframe_format_export(
+            df_documents_raw.loc[
+                df_documents_raw["_type"] == "safetyPlan"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "safetyPlans.transformed",
+        ),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "safetyPlan"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    # Formatted safety plan documents.
+    drop_columns = [
+        "_set_id",
+    ]
+    rename_columns = {
+        "_type": "_docType",
+        "_id": "_docId",
+    }
+    sort_columns = [
+        "_docType",
+        "recordId",
+        "_patientId",
+        "_docId",
+        "_rev",
+        "_created",
+        "assigned",
+        "assignedDateTime",
+        "lastUpdatedDateTime",
+        "reasonsForLiving",
+        "warningSigns",
+        "copingStrategies",
+        "socialDistractions",
+        "settingDistractions",
+        "supporters",
+        "professionals",
+        "urgentServices",
+        "safeEnvironment",
+    ]
+    sort_rows_by_columns = [
+        "recordId",
+        "_patientId",
+        "_rev",
+    ]
+
+    export_dataframe(
+        pathlib.Path("safetyPlans"),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "safetyPlan"
+            ],
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+
+# %% [markdown]
 # ### Analysis: Values
 
 # %%
@@ -3064,7 +3173,6 @@ def export_analysis_values():
 # Runs all analysis export functions defined above.
 #
 # Document types not yet exported:
-# - safetyPlan
 # - scheduledActivity
 # - scheduledAssessment
 # - session
@@ -3081,6 +3189,7 @@ export_analysis_clinical_history()
 export_analysis_mood_logs()
 export_analysis_patient_profile()
 export_analysis_review_mark()
+export_analysis_safety_plan()
 export_analysis_values()
 
 # %% [markdown]
