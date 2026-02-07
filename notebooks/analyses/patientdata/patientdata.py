@@ -2770,9 +2770,7 @@ def export_analysis_values():
 # Runs all analysis export functions defined above.
 #
 # Document types not yet exported:
-# - patientIdentity
 # - patientProfile
-# - providerIdentity
 # - reviewMark
 # - safetyPlan
 # - scheduledActivity
