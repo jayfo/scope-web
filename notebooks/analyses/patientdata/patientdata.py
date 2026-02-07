@@ -884,10 +884,10 @@ df_documents_raw = pd.concat(patient_id_to_df_documents_raw.values(), ignore_ind
 # - `valueLifeArea` and `valueName` are calculated via lookup of `valueId`.
 
 # %% [markdown]
-# ### Transform: transform_activity
+# ### Transform: transform_activities
 
 # %%
-def transform_activity(
+def transform_activities(
     df_documents: pd.DataFrame,
     documents: document_set.DocumentSet,
 ) -> pd.DataFrame:
@@ -974,10 +974,10 @@ def transform_activity(
 # - `value` and `activity` fields are calculated from a snapshot stored with the `activityLog`.
 
 # %% [markdown]
-# ### Transform: transform_activity_log
+# ### Transform: transform_activity_logs
 
 # %%
-def transform_activity_log(
+def transform_activity_logs(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     def _transform_snapshot_value_id(row):
@@ -1113,10 +1113,10 @@ def transform_activity_log(
 # - `scheduleRepeatDays` is calculated from a raw `repeatDayFlags`.
 
 # %% [markdown]
-# ### Transform: transform_activity_schedule
+# ### Transform: transform_activity_schedules
 
 # %%
-def transform_activity_schedule(
+def transform_activity_schedules(
     df_documents: pd.DataFrame,
     documents: document_set.DocumentSet,
 ) -> pd.DataFrame:
@@ -1297,10 +1297,10 @@ def transform_activity_schedule(
 # Includes common fields documented in `commonFields.md`.
 
 # %% [markdown]
-# ### Transform: transform_assessment
+# ### Transform: transform_assessments
 
 # %%
-def transform_assessment(
+def transform_assessments(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     df_documents = df_documents.copy()
@@ -1361,10 +1361,10 @@ def transform_assessment(
 # TODO: `todo_submittedByProviderId` is present for registry-submitted entries, may allow recovering information about who submitted an entry.
 
 # %% [markdown]
-# ### Transform: transform_assessment_log
+# ### Transform: transform_assessment_logs
 
 # %%
-def transform_assessment_log(
+def transform_assessment_logs(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # Pull each value of the gad-7 assessment scale out to its own column.
@@ -1536,10 +1536,10 @@ def transform_assessment_log(
 # Includes common fields documented in `commonFields.md`.
 
 # %% [markdown]
-# ### Transform: transform_case_review
+# ### Transform: transform_case_reviews
 
 # %%
-def transform_case_review(
+def transform_case_reviews(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # Elevate up the name of the psychiatrist.
@@ -1575,10 +1575,10 @@ def transform_case_review(
 # Includes common fields documented in `commonFields.md`.
 
 # %% [markdown]
-# ### Transform: transform_clinical_history
+# ### Transform: transform_clinical_histories
 
 # %%
-def transform_clinical_history(
+def transform_clinical_histories(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # Expand currentTreatmentRegimen (cancerTreatmentRegimenFlags) into one column per flag.
@@ -1626,10 +1626,10 @@ def transform_clinical_history(
 # - All values of `_rev` are `1`, as it was not possible to edit a mood log.
 
 # %% [markdown]
-# ### Transform: transform_mood_log
+# ### Transform: transform_mood_logs
 
 # %%
-def transform_mood_log(
+def transform_mood_logs(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # No transformations are needed.
@@ -1644,10 +1644,10 @@ def transform_mood_log(
 # Includes common fields documented in `commonFields.md`.
 
 # %% [markdown]
-# ### Transform: transform_patient_profile
+# ### Transform: transform_patient_profiles
 
 # %%
-def transform_patient_profile(
+def transform_patient_profiles(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # Flatten primaryCareManager to primaryCareManagerName.
@@ -1733,10 +1733,10 @@ def transform_patient_profile(
 # Includes common fields documented in `commonFields.md`.
 
 # %% [markdown]
-# ### Transform: transform_review_mark
+# ### Transform: transform_review_marks
 
 # %%
-def transform_review_mark(
+def transform_review_marks(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # No transformations are needed.
@@ -1751,10 +1751,10 @@ def transform_review_mark(
 # Includes common fields documented in `commonFields.md`.
 
 # %% [markdown]
-# ### Transform: transform_safety_plan
+# ### Transform: transform_safety_plans
 
 # %%
-def transform_safety_plan(
+def transform_safety_plans(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # No transformations are needed.
@@ -1769,10 +1769,28 @@ def transform_safety_plan(
 # Includes common fields documented in `commonFields.md`.
 
 # %% [markdown]
-# ### Transform: transform_scheduled_assessment
+# ### Transform: transform_scheduled_assessments
 
 # %%
-def transform_scheduled_assessment(
+def transform_scheduled_assessments(
+    df_documents: pd.DataFrame,
+) -> pd.DataFrame:
+    # No transformations are needed.
+    return df_documents
+
+
+# %% [markdown]
+# ### Documentation: Scheduled Activity
+#
+# Exported from `scheduledActivity` documents. A single row is included for each `scheduledActivity`.
+#
+# Includes common fields documented in `commonFields.md`.
+
+# %% [markdown]
+# ### Transform: transform_scheduled_activities
+
+# %%
+def transform_scheduled_activities(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # No transformations are needed.
@@ -1787,10 +1805,10 @@ def transform_scheduled_assessment(
 # Includes common fields documented in `commonFields.md`.
 
 # %% [markdown]
-# ### Transform: transform_session
+# ### Transform: transform_sessions
 
 # %%
-def transform_session(
+def transform_sessions(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # Expand behavioralStrategyChecklist (behavioralStrategyChecklistFlags) into one column per flag.
@@ -1859,10 +1877,10 @@ def transform_session(
 # Includes common fields documented in `commonFields.md`.
 
 # %% [markdown]
-# ### Transform: transform_value
+# ### Transform: transform_values
 
 # %%
-def transform_value(
+def transform_values(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # Deleted rows will not have a id, so restore that from the _set_id.
@@ -1890,10 +1908,10 @@ def transform_value(
 # Includes common fields documented in `commonFields.md`.
 
 # %% [markdown]
-# ### Transform: transform_values_inventory
+# ### Transform: transform_values_inventories
 
 # %%
-def transform_values_inventory(
+def transform_values_inventories(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # No transformations are needed.
@@ -1912,51 +1930,54 @@ def apply_transforms(
     documents: document_set.DocumentSet,
 ) -> pd.DataFrame:
     df_documents = df_documents.copy()
-    df_documents = transform_activity(
+    df_documents = transform_activities(
         df_documents,
         documents,
     )
-    df_documents = transform_activity_log(
+    df_documents = transform_activity_logs(
         df_documents,
     )
-    df_documents = transform_activity_schedule(
+    df_documents = transform_activity_schedules(
         df_documents,
         documents,
     )
-    df_documents = transform_assessment(
+    df_documents = transform_assessments(
         df_documents,
     )
-    df_documents = transform_assessment_log(
+    df_documents = transform_assessment_logs(
         df_documents,
     )
-    df_documents = transform_case_review(
+    df_documents = transform_case_reviews(
         df_documents,
     )
-    df_documents = transform_clinical_history(
+    df_documents = transform_clinical_histories(
         df_documents,
     )
-    df_documents = transform_mood_log(
+    df_documents = transform_mood_logs(
         df_documents,
     )
-    df_documents = transform_patient_profile(
+    df_documents = transform_patient_profiles(
         df_documents,
     )
-    df_documents = transform_review_mark(
+    df_documents = transform_review_marks(
         df_documents,
     )
-    df_documents = transform_safety_plan(
+    df_documents = transform_safety_plans(
         df_documents,
     )
-    df_documents = transform_scheduled_assessment(
+    df_documents = transform_scheduled_assessments(
         df_documents,
     )
-    df_documents = transform_session(
+    df_documents = transform_scheduled_activities(
         df_documents,
     )
-    df_documents = transform_value(
+    df_documents = transform_sessions(
         df_documents,
     )
-    df_documents = transform_values_inventory(
+    df_documents = transform_values(
+        df_documents,
+    )
+    df_documents = transform_values_inventories(
         df_documents,
     )
 
@@ -2041,6 +2062,7 @@ export_file_list: List[ExportFile] = []
 # - `reviewMarks` is an export of all `reviewMark` documents. Documentation in `reviewMarks.md`.
 # - `safetyPlans` is an export of all `safetyPlan` documents. Documentation in `safetyPlans.md`.
 # - `scheduledAssessments` is an export of all `scheduledAssessment` documents. Documentation in `scheduledAssessments.md`.
+# - `scheduledActivities` is an export of all `scheduledActivity` documents. Documentation in `scheduledActivities.md`.
 # - `sessions` is an export of all `session` documents. Documentation in `sessions.md`.
 # - `values` is an export of all `value` documents. Documentation in `values.md`.
 # - `valuesInventories` is an export of all `valuesInventory` documents. Documentation in `valuesInventories.md`.
@@ -2050,7 +2072,7 @@ export_file_list: List[ExportFile] = []
 # - A person may have configured one or more `value`.
 # - A person may have configured one or more `activity`. Each may have a `value` associated with it.
 # - A `activity` may have one or more `activitySchedule` configured. These may be one-time or repeating.
-# - Not currently included in any analysis export, creation of an `activitySchedule` also created of a set of `scheduledActivity` instances (i.e., one for each day the activity was scheduled).
+# - Creation of an `activitySchedule` also created a set of `scheduledActivity` instances (i.e., one for each day the activity was scheduled).
 # - A person could complete an `activityLog` corresponding to a `scheduledActivity`.
 #
 # There was also a significant redesign of the relationship between `value` and `activity` documents in the `v0.7.0` release deployed on 2023-04-29.
@@ -2784,7 +2806,7 @@ def export_analysis_case_reviews():
 # ### Analysis: Clinical History
 
 # %%
-def export_analysis_clinical_history():
+def export_analysis_clinical_histories():
     # Documentation of this analysis.
     export_markdown(
         pathlib.Path("clinicalHistory"),
@@ -2950,7 +2972,7 @@ def export_analysis_mood_logs():
 # ### Analysis: Patient Profile
 
 # %%
-def export_analysis_patient_profile():
+def export_analysis_patient_profiles():
     # Documentation of this analysis.
     export_markdown(
         pathlib.Path("patientProfiles"),
@@ -3050,7 +3072,7 @@ def export_analysis_patient_profile():
 # ### Analysis: Review Mark
 
 # %%
-def export_analysis_review_mark():
+def export_analysis_review_marks():
     # Documentation of this analysis.
     export_markdown(
         pathlib.Path("reviewMarks"),
@@ -3129,7 +3151,7 @@ def export_analysis_review_mark():
 # ### Analysis: Safety Plan
 
 # %%
-def export_analysis_safety_plan():
+def export_analysis_safety_plans():
     # Documentation of this analysis.
     export_markdown(
         pathlib.Path("safetyPlans"),
@@ -3216,7 +3238,7 @@ def export_analysis_safety_plan():
 # ### Analysis: Scheduled Assessment
 
 # %%
-def export_analysis_scheduled_assessment():
+def export_analysis_scheduled_assessments():
     # Documentation of this analysis.
     export_markdown(
         pathlib.Path("scheduledAssessments"),
@@ -3298,10 +3320,92 @@ def export_analysis_scheduled_assessment():
 
 
 # %% [markdown]
+# ### Analysis: Scheduled Activity
+
+# %%
+def export_analysis_scheduled_activities():
+    # Documentation of this analysis.
+    export_markdown(
+        pathlib.Path("scheduledActivities"),
+        documentation_as_markdown("Scheduled Activity"),
+    )
+
+    # Preliminary documents.
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "scheduledActivities.raw",
+        ),
+        dataframe_format_export(
+            df_documents_raw.loc[
+                df_documents_raw["_type"] == "scheduledActivity"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "scheduledActivities.transformed",
+        ),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "scheduledActivity"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    # Formatted scheduled activity documents.
+    drop_columns = [
+        "_set_id",
+    ]
+    rename_columns = {
+        "_type": "_docType",
+        "_id": "_docId",
+    }
+    sort_columns = [
+        "_docType",
+        "recordId",
+        "_patientId",
+        "_docId",
+        "scheduledActivityId",
+        "_rev",
+        "_created",
+        "activityScheduleId",
+        "dataSnapshot",
+        "dueDate",
+        "dueTimeOfDay",
+        "dueDateTime",
+        "completed",
+    ]
+    sort_rows_by_columns = [
+        "recordId",
+        "_patientId",
+        "_created",
+    ]
+
+    export_dataframe(
+        pathlib.Path("scheduledActivities"),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "scheduledActivity"
+            ],
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+
+# %% [markdown]
 # ### Analysis: Session
 
 # %%
-def export_analysis_session():
+def export_analysis_sessions():
     # Documentation of this analysis.
     export_markdown(
         pathlib.Path("sessions"),
@@ -3478,7 +3582,7 @@ def export_analysis_values():
 # ### Analysis: Values Inventory
 
 # %%
-def export_analysis_values_inventory():
+def export_analysis_values_inventories():
     # Documentation of this analysis.
     export_markdown(
         pathlib.Path("valuesInventories"),
@@ -3555,9 +3659,6 @@ def export_analysis_values_inventory():
 # ### Execute Exports
 #
 # Runs all analysis export functions defined above.
-#
-# Document types not yet exported:
-# - scheduledActivity
 
 # %%
 export_analysis_activities()
@@ -3566,15 +3667,16 @@ export_analysis_activity_schedules()
 export_analysis_assessments()
 export_analysis_assessment_logs()
 export_analysis_case_reviews()
-export_analysis_clinical_history()
+export_analysis_clinical_histories()
 export_analysis_mood_logs()
-export_analysis_patient_profile()
-export_analysis_review_mark()
-export_analysis_safety_plan()
-export_analysis_scheduled_assessment()
-export_analysis_session()
+export_analysis_patient_profiles()
+export_analysis_review_marks()
+export_analysis_safety_plans()
+export_analysis_scheduled_assessments()
+export_analysis_scheduled_activities()
+export_analysis_sessions()
 export_analysis_values()
-export_analysis_values_inventory()
+export_analysis_values_inventories()
 
 # %% [markdown]
 # ### Write Archive
