@@ -1371,7 +1371,7 @@ def transform_assessment_logs(
     def _transform_gad7_points(
         df_documents: pd.DataFrame,
     ) -> pd.DataFrame:
-        def _factory_transform_gad7_points_key(keyJson):
+        def _factory_transform_gad7_points_key(key_json):
             def _transform_gad7_points_key(row):
                 if row["_type"] != "assessmentLog":
                     return None
@@ -1380,11 +1380,11 @@ def transform_assessment_logs(
                 if not row["pointValues"]:
                     return None
 
-                return row["pointValues"][keyJson]
+                return row["pointValues"][key_json]
 
             return _transform_gad7_points_key
 
-        gad7EnumMap = {
+        gad7_enum_map = {
             "Anxious": "gad7Anxious",
             "Constant worrying": "gad7ConstantWorrying",
             "Worrying too much": "gad7WorryingTooMuch",
@@ -1394,9 +1394,9 @@ def transform_assessment_logs(
             "Afraid": "gad7Afraid",
         }
 
-        for (keyJson, keyExport) in gad7EnumMap.items():
-            df_documents[keyExport] = df_documents.apply(
-                _factory_transform_gad7_points_key(keyJson), axis=1
+        for (key_json, key_export) in gad7_enum_map.items():
+            df_documents[key_export] = df_documents.apply(
+                _factory_transform_gad7_points_key(key_json), axis=1
             )
 
         return df_documents
@@ -1423,7 +1423,7 @@ def transform_assessment_logs(
     def _transform_phq9_points(
         df_documents: pd.DataFrame,
     ) -> pd.DataFrame:
-        def _factory_transform_phq9_points_key(keyJson):
+        def _factory_transform_phq9_points_key(key_json):
             def _transform_phq9_points_key(row):
                 if row["_type"] != "assessmentLog":
                     return None
@@ -1432,11 +1432,11 @@ def transform_assessment_logs(
                 if not row["pointValues"]:
                     return None
 
-                return row["pointValues"][keyJson]
+                return row["pointValues"][key_json]
 
             return _transform_phq9_points_key
 
-        phq9EnumMap = {
+        phq9_enum_map = {
             "Interest": "phq9Interest",
             "Mood": "phq9Mood",
             "Sleep": "phq9Sleep",
@@ -1448,9 +1448,9 @@ def transform_assessment_logs(
             "Suicide": "phq9Suicide",
         }
 
-        for (keyJson, keyExport) in phq9EnumMap.items():
-            df_documents[keyExport] = df_documents.apply(
-                _factory_transform_phq9_points_key(keyJson), axis=1
+        for (key_json, key_export) in phq9_enum_map.items():
+            df_documents[key_export] = df_documents.apply(
+                _factory_transform_phq9_points_key(key_json), axis=1
             )
 
         return df_documents
@@ -1582,18 +1582,18 @@ def transform_clinical_histories(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # Expand currentTreatmentRegimen (cancerTreatmentRegimenFlags) into one column per flag.
-    def _factory_transform_current_treatment_regimen_key(keyJson):
+    def _factory_transform_current_treatment_regimen_key(key_json):
         def _transform_key(row):
             if row["_type"] != "clinicalHistory":
                 return None
             regimen = row.get("currentTreatmentRegimen")
             if not isinstance(regimen, dict):
                 return None
-            return regimen.get(keyJson)
+            return regimen.get(key_json)
 
         return _transform_key
 
-    currentTreatmentRegimenEnumMap = {
+    current_treatment_regimen_enum_map = {
         "Surgery": "currentTreatmentRegimenSurgery",
         "Chemotherapy": "currentTreatmentRegimenChemotherapy",
         "Radiation": "currentTreatmentRegimenRadiation",
@@ -1606,9 +1606,9 @@ def transform_clinical_histories(
     }
 
     df_documents = df_documents.copy()
-    for (keyJson, keyExport) in currentTreatmentRegimenEnumMap.items():
-        df_documents[keyExport] = df_documents.apply(
-            _factory_transform_current_treatment_regimen_key(keyJson), axis=1
+    for (key_json, key_export) in current_treatment_regimen_enum_map.items():
+        df_documents[key_export] = df_documents.apply(
+            _factory_transform_current_treatment_regimen_key(key_json), axis=1
         )
 
     return df_documents
@@ -1660,18 +1660,18 @@ def transform_patient_profiles(
         return primary_care_manager.get("name")
 
     # Expand race (PatientRaceFlags) into one column per flag.
-    def _factory_transform_race_key(keyJson):
+    def _factory_transform_race_key(key_json):
         def _transform_key(row):
             if row["_type"] != "profile":
                 return None
             race_obj = row.get("race")
             if not isinstance(race_obj, dict):
                 return None
-            return race_obj.get(keyJson)
+            return race_obj.get(key_json)
 
         return _transform_key
 
-    raceEnumMap = {
+    race_enum_map = {
         "American Indian or Alaska Native": "raceAmericanIndianOrAlaskaNative",
         "Asian or Asian American": "raceAsianOrAsianAmerican",
         "Black or African American": "raceBlackOrAfricanAmerican",
@@ -1681,18 +1681,18 @@ def transform_patient_profiles(
     }
 
     # Expand discussionFlag (DiscussionFlags) into one column per flag.
-    def _factory_transform_discussion_flag_key(keyJson):
+    def _factory_transform_discussion_flag_key(key_json):
         def _transform_key(row):
             if row["_type"] != "profile":
                 return None
             discussion_flag = row.get("discussionFlag")
             if not isinstance(discussion_flag, dict):
                 return None
-            return discussion_flag.get(keyJson)
+            return discussion_flag.get(key_json)
 
         return _transform_key
 
-    discussionFlagEnumMap = {
+    discussion_flag_enum_map = {
         "Flag as safety risk": "discussionFlagFlagAsSafetyRisk",
         "Flag for discussion": "discussionFlagFlagForDiscussion",
     }
@@ -1713,13 +1713,13 @@ def transform_patient_profiles(
     df_documents["primaryCareManagerName"] = df_documents.apply(
         _transform_primary_care_manager_name, axis=1
     )
-    for (keyJson, keyExport) in raceEnumMap.items():
-        df_documents[keyExport] = df_documents.apply(
-            _factory_transform_race_key(keyJson), axis=1
+    for (key_json, key_export) in race_enum_map.items():
+        df_documents[key_export] = df_documents.apply(
+            _factory_transform_race_key(key_json), axis=1
         )
-    for (keyJson, keyExport) in discussionFlagEnumMap.items():
-        df_documents[keyExport] = df_documents.apply(
-            _factory_transform_discussion_flag_key(keyJson), axis=1
+    for (key_json, key_export) in discussion_flag_enum_map.items():
+        df_documents[key_export] = df_documents.apply(
+            _factory_transform_discussion_flag_key(key_json), axis=1
         )
 
     return df_documents
@@ -1812,18 +1812,18 @@ def transform_sessions(
     df_documents: pd.DataFrame,
 ) -> pd.DataFrame:
     # Expand behavioralStrategyChecklist (behavioralStrategyChecklistFlags) into one column per flag.
-    def _factory_transform_behavioral_strategy_checklist_key(keyJson):
+    def _factory_transform_behavioral_strategy_checklist_key(key_json):
         def _transform_key(row):
             if row["_type"] != "session":
                 return None
             checklist = row.get("behavioralStrategyChecklist")
             if not isinstance(checklist, dict):
                 return None
-            return checklist.get(keyJson)
+            return checklist.get(key_json)
 
         return _transform_key
 
-    behavioralStrategyChecklistEnumMap = {
+    behavioral_strategy_checklist_enum_map = {
         "Behavioral Activation": "behavioralStrategyChecklistBehavioralActivation",
         "Motivational Interviewing": "behavioralStrategyChecklistMotivationalInterviewing",
         "Problem Solving Therapy": "behavioralStrategyChecklistProblemSolvingTherapy",
@@ -1834,18 +1834,18 @@ def transform_sessions(
     }
 
     # Expand behavioralActivationChecklist (bAChecklistFlags) into one column per flag.
-    def _factory_transform_behavioral_activation_checklist_key(keyJson):
+    def _factory_transform_behavioral_activation_checklist_key(key_json):
         def _transform_key(row):
             if row["_type"] != "session":
                 return None
             checklist = row.get("behavioralActivationChecklist")
             if not isinstance(checklist, dict):
                 return None
-            return checklist.get(keyJson)
+            return checklist.get(key_json)
 
         return _transform_key
 
-    behavioralActivationChecklistEnumMap = {
+    behavioral_activation_checklist_enum_map = {
         "Review of the BA model": "behavioralActivationChecklistReviewOfTheBAModel",
         "Values and goals assessment": "behavioralActivationChecklistValuesAndGoalsAssessment",
         "Activity scheduling": "behavioralActivationChecklistActivityScheduling",
@@ -1857,13 +1857,13 @@ def transform_sessions(
     }
 
     df_documents = df_documents.copy()
-    for (keyJson, keyExport) in behavioralStrategyChecklistEnumMap.items():
-        df_documents[keyExport] = df_documents.apply(
-            _factory_transform_behavioral_strategy_checklist_key(keyJson), axis=1
+    for (key_json, key_export) in behavioral_strategy_checklist_enum_map.items():
+        df_documents[key_export] = df_documents.apply(
+            _factory_transform_behavioral_strategy_checklist_key(key_json), axis=1
         )
-    for (keyJson, keyExport) in behavioralActivationChecklistEnumMap.items():
-        df_documents[keyExport] = df_documents.apply(
-            _factory_transform_behavioral_activation_checklist_key(keyJson), axis=1
+    for (key_json, key_export) in behavioral_activation_checklist_enum_map.items():
+        df_documents[key_export] = df_documents.apply(
+            _factory_transform_behavioral_activation_checklist_key(key_json), axis=1
         )
 
     return df_documents
