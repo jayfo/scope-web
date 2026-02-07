@@ -1793,6 +1793,24 @@ def transform_value(
 
 
 # %% [markdown]
+# ### Documentation: Values Inventory
+#
+# Exported from `valuesInventory` documents. A single row is included for each `valuesInventory`.
+#
+# Includes common fields documented in `commonFields.md`.
+
+# %% [markdown]
+# ### Transform: transform_values_inventory
+
+# %%
+def transform_values_inventory(
+    df_documents: pd.DataFrame,
+) -> pd.DataFrame:
+    # No transformations are needed.
+    return df_documents
+
+
+# %% [markdown]
 # ### Utility: apply_transforms
 
 # %% [markdown]
@@ -1840,6 +1858,9 @@ def apply_transforms(
         df_documents,
     )
     df_documents = transform_value(
+        df_documents,
+    )
+    df_documents = transform_values_inventory(
         df_documents,
     )
 
@@ -1924,6 +1945,7 @@ export_file_list: List[ExportFile] = []
 # - `reviewMarks` is an export of all `reviewMark` documents. Documentation in `reviewMarks.md`.
 # - `safetyPlans` is an export of all `safetyPlan` documents. Documentation in `safetyPlans.md`.
 # - `values` is an export of all `value` documents. Documentation in `values.md`.
+# - `valuesInventories` is an export of all `valuesInventory` documents. Documentation in `valuesInventories.md`.
 #
 # Several of the above data types are related.
 #
@@ -3168,6 +3190,83 @@ def export_analysis_values():
 
 
 # %% [markdown]
+# ### Analysis: Values Inventory
+
+# %%
+def export_analysis_values_inventory():
+    # Documentation of this analysis.
+    export_markdown(
+        pathlib.Path("valuesInventories"),
+        documentation_as_markdown("Values Inventory"),
+    )
+
+    # Preliminary documents.
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "valuesInventories.raw",
+        ),
+        dataframe_format_export(
+            df_documents_raw.loc[
+                df_documents_raw["_type"] == "valuesInventory"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "valuesInventories.transformed",
+        ),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "valuesInventory"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    # Formatted values inventory documents.
+    drop_columns = [
+        "_set_id",
+    ]
+    rename_columns = {
+        "_type": "_docType",
+        "_id": "_docId",
+    }
+    sort_columns = [
+        "_docType",
+        "recordId",
+        "_patientId",
+        "_docId",
+        "_rev",
+        "_created",
+        "assigned",
+        "assignedDateTime",
+    ]
+    sort_rows_by_columns = [
+        "recordId",
+        "_patientId",
+        "_rev",
+    ]
+
+    export_dataframe(
+        pathlib.Path("valuesInventories"),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "valuesInventory"
+            ],
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+
+# %% [markdown]
 # ### Execute Exports
 #
 # Runs all analysis export functions defined above.
@@ -3176,7 +3275,6 @@ def export_analysis_values():
 # - scheduledActivity
 # - scheduledAssessment
 # - session
-# - valuesInventory
 
 # %%
 export_analysis_activities()
@@ -3191,6 +3289,7 @@ export_analysis_patient_profile()
 export_analysis_review_mark()
 export_analysis_safety_plan()
 export_analysis_values()
+export_analysis_values_inventory()
 
 # %% [markdown]
 # ### Write Archive
