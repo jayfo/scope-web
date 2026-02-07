@@ -1637,6 +1637,95 @@ def transform_mood_log(
 
 
 # %% [markdown]
+# ### Documentation: Patient Profile
+#
+# Exported from `profile` (patientProfile) documents. A single row is included for each `profile`.
+#
+# Includes common fields documented in `commonFields.md`.
+
+# %% [markdown]
+# ### Transform: transform_patient_profile
+
+# %%
+def transform_patient_profile(
+    df_documents: pd.DataFrame,
+) -> pd.DataFrame:
+    # Flatten primaryCareManager to primaryCareManagerName.
+    def _transform_primary_care_manager_name(row):
+        if row["_type"] != "profile":
+            return None
+        primary_care_manager = row.get("primaryCareManager")
+        if not isinstance(primary_care_manager, dict):
+            return None
+        return primary_care_manager.get("name")
+
+    # Expand race (PatientRaceFlags) into one column per flag.
+    def _factory_transform_race_key(keyJson):
+        def _transform_key(row):
+            if row["_type"] != "profile":
+                return None
+            race_obj = row.get("race")
+            if not isinstance(race_obj, dict):
+                return None
+            return race_obj.get(keyJson)
+
+        return _transform_key
+
+    raceEnumMap = {
+        "American Indian or Alaska Native": "raceAmericanIndianOrAlaskaNative",
+        "Asian or Asian American": "raceAsianOrAsianAmerican",
+        "Black or African American": "raceBlackOrAfricanAmerican",
+        "Native Hawaiian or Other Pacific Islander": "raceNativeHawaiianOrOtherPacificIslander",
+        "White": "raceWhite",
+        "Unknown": "raceUnknown",
+    }
+
+    # Expand discussionFlag (DiscussionFlags) into one column per flag.
+    def _factory_transform_discussion_flag_key(keyJson):
+        def _transform_key(row):
+            if row["_type"] != "profile":
+                return None
+            discussion_flag = row.get("discussionFlag")
+            if not isinstance(discussion_flag, dict):
+                return None
+            return discussion_flag.get(keyJson)
+
+        return _transform_key
+
+    discussionFlagEnumMap = {
+        "Flag as safety risk": "discussionFlagFlagAsSafetyRisk",
+        "Flag for discussion": "discussionFlagFlagForDiscussion",
+    }
+
+    # Format enrollmentDate as YYYY-MM-DD.
+    def _transform_enrollment_date(row):
+        if row["_type"] != "profile":
+            return row.get("enrollmentDate", None)
+        if pd.isna(row.get("enrollmentDate", None)) or not row.get("enrollmentDate"):
+            return None
+        date_parsed = date_utils.parse_date(date=row["enrollmentDate"])
+        return date_parsed.strftime("%Y-%m-%d")
+
+    df_documents = df_documents.copy()
+    df_documents["enrollmentDate"] = df_documents.apply(
+        _transform_enrollment_date, axis=1
+    )
+    df_documents["primaryCareManagerName"] = df_documents.apply(
+        _transform_primary_care_manager_name, axis=1
+    )
+    for (keyJson, keyExport) in raceEnumMap.items():
+        df_documents[keyExport] = df_documents.apply(
+            _factory_transform_race_key(keyJson), axis=1
+        )
+    for (keyJson, keyExport) in discussionFlagEnumMap.items():
+        df_documents[keyExport] = df_documents.apply(
+            _factory_transform_discussion_flag_key(keyJson), axis=1
+        )
+
+    return df_documents
+
+
+# %% [markdown]
 # ### Documentation: Values
 #
 # Exported from `value` documents. A single row is included for each `value`.
@@ -1703,6 +1792,9 @@ def apply_transforms(
         df_documents,
     )
     df_documents = transform_mood_log(
+        df_documents,
+    )
+    df_documents = transform_patient_profile(
         df_documents,
     )
     df_documents = transform_value(
@@ -1786,6 +1878,7 @@ export_file_list: List[ExportFile] = []
 # - `assessmentsPhq9` is an export of all PHQ-9 `assessmentLog` documents. Documentation in `assessmentLogs.md`.
 # - `clinicalHistory` is an export of all `clinicalHistory` documents. Documentation in `clinicalHistory.md`.
 # - `moodLogs` is an export of all `moodLog` documents. Documentation in `moodLogs.md`.
+# - `patientProfiles` is an export of all `profile` documents. Documentation in `patientProfiles.md`.
 # - `values` is an export of all `value` documents. Documentation in `values.md`.
 #
 # Several of the above data types are related.
@@ -2690,6 +2783,106 @@ def export_analysis_mood_logs():
 
 
 # %% [markdown]
+# ### Analysis: Patient Profile
+
+# %%
+def export_analysis_patient_profile():
+    # Documentation of this analysis.
+    export_markdown(
+        pathlib.Path("patientProfiles"),
+        documentation_as_markdown("Patient Profile"),
+    )
+
+    # Preliminary documents.
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "patientProfiles.raw",
+        ),
+        dataframe_format_export(
+            df_documents_raw.loc[
+                df_documents_raw["_type"] == "profile"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "patientProfiles.transformed",
+        ),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "profile"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    # Formatted patient profile documents.
+    drop_columns = [
+        "_set_id",
+        "primaryCareManager",
+        "race",
+        "discussionFlag",
+    ]
+    rename_columns = {
+        "_type": "_docType",
+        "_id": "_docId",
+    }
+    sort_columns = [
+        "_docType",
+        "recordId",
+        "_patientId",
+        "_docId",
+        "_rev",
+        "_created",
+        "name",
+        "MRN",
+        "clinicCode",
+        "birthdate",
+        "sex",
+        "gender",
+        "pronoun",
+        "raceAmericanIndianOrAlaskaNative",
+        "raceAsianOrAsianAmerican",
+        "raceBlackOrAfricanAmerican",
+        "raceNativeHawaiianOrOtherPacificIslander",
+        "raceWhite",
+        "raceUnknown",
+        "ethnicity",
+        "primaryOncologyProvider",
+        "primaryCareManagerName",
+        "discussionFlagFlagAsSafetyRisk",
+        "discussionFlagFlagForDiscussion",
+        "followupSchedule",
+        "depressionTreatmentStatus",
+        "site",
+        "enrollmentDate",
+    ]
+    sort_rows_by_columns = [
+        "recordId",
+        "_patientId",
+        "_rev",
+    ]
+
+    export_dataframe(
+        pathlib.Path("patientProfiles"),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "profile"
+            ],
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+
+# %% [markdown]
 # ### Analysis: Values
 
 # %%
@@ -2770,7 +2963,6 @@ def export_analysis_values():
 # Runs all analysis export functions defined above.
 #
 # Document types not yet exported:
-# - patientProfile
 # - reviewMark
 # - safetyPlan
 # - scheduledActivity
@@ -2787,6 +2979,7 @@ export_analysis_assessment_logs()
 export_analysis_case_reviews()
 export_analysis_clinical_history()
 export_analysis_mood_logs()
+export_analysis_patient_profile()
 export_analysis_values()
 
 # %% [markdown]
