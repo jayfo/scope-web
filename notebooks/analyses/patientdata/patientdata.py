@@ -1726,6 +1726,24 @@ def transform_patient_profile(
 
 
 # %% [markdown]
+# ### Documentation: Review Mark
+#
+# Exported from `reviewMark` documents. A single row is included for each `reviewMark`.
+#
+# Includes common fields documented in `commonFields.md`.
+
+# %% [markdown]
+# ### Transform: transform_review_mark
+
+# %%
+def transform_review_mark(
+    df_documents: pd.DataFrame,
+) -> pd.DataFrame:
+    # No transformations are needed.
+    return df_documents
+
+
+# %% [markdown]
 # ### Documentation: Values
 #
 # Exported from `value` documents. A single row is included for each `value`.
@@ -1795,6 +1813,9 @@ def apply_transforms(
         df_documents,
     )
     df_documents = transform_patient_profile(
+        df_documents,
+    )
+    df_documents = transform_review_mark(
         df_documents,
     )
     df_documents = transform_value(
@@ -1879,6 +1900,7 @@ export_file_list: List[ExportFile] = []
 # - `clinicalHistory` is an export of all `clinicalHistory` documents. Documentation in `clinicalHistory.md`.
 # - `moodLogs` is an export of all `moodLog` documents. Documentation in `moodLogs.md`.
 # - `patientProfiles` is an export of all `profile` documents. Documentation in `patientProfiles.md`.
+# - `reviewMarks` is an export of all `reviewMark` documents. Documentation in `reviewMarks.md`.
 # - `values` is an export of all `value` documents. Documentation in `values.md`.
 #
 # Several of the above data types are related.
@@ -2883,6 +2905,85 @@ def export_analysis_patient_profile():
 
 
 # %% [markdown]
+# ### Analysis: Review Mark
+
+# %%
+def export_analysis_review_mark():
+    # Documentation of this analysis.
+    export_markdown(
+        pathlib.Path("reviewMarks"),
+        documentation_as_markdown("Review Mark"),
+    )
+
+    # Preliminary documents.
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "reviewMarks.raw",
+        ),
+        dataframe_format_export(
+            df_documents_raw.loc[
+                df_documents_raw["_type"] == "reviewMark"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "reviewMarks.transformed",
+        ),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "reviewMark"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    # Formatted review mark documents.
+    drop_columns = [
+        "_set_id",
+    ]
+    rename_columns = {
+        "_type": "_docType",
+        "_id": "_docId",
+    }
+    sort_columns = [
+        "_docType",
+        "recordId",
+        "_patientId",
+        "_docId",
+        "reviewMarkId",
+        "_rev",
+        "_created",
+        "editedDateTime",
+        "effectiveDateTime",
+        "providerId",
+    ]
+    sort_rows_by_columns = [
+        "recordId",
+        "_patientId",
+        "_created",
+    ]
+
+    export_dataframe(
+        pathlib.Path("reviewMarks"),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "reviewMark"
+            ],
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+
+# %% [markdown]
 # ### Analysis: Values
 
 # %%
@@ -2963,7 +3064,6 @@ def export_analysis_values():
 # Runs all analysis export functions defined above.
 #
 # Document types not yet exported:
-# - reviewMark
 # - safetyPlan
 # - scheduledActivity
 # - scheduledAssessment
@@ -2980,6 +3080,7 @@ export_analysis_case_reviews()
 export_analysis_clinical_history()
 export_analysis_mood_logs()
 export_analysis_patient_profile()
+export_analysis_review_mark()
 export_analysis_values()
 
 # %% [markdown]
