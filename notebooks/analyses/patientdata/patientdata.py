@@ -1762,6 +1762,78 @@ def transform_safety_plan(
 
 
 # %% [markdown]
+# ### Documentation: Session
+#
+# Exported from `session` documents. A single row is included for each `session`.
+#
+# Includes common fields documented in `commonFields.md`.
+
+# %% [markdown]
+# ### Transform: transform_session
+
+# %%
+def transform_session(
+    df_documents: pd.DataFrame,
+) -> pd.DataFrame:
+    # Expand behavioralStrategyChecklist (behavioralStrategyChecklistFlags) into one column per flag.
+    def _factory_transform_behavioral_strategy_checklist_key(keyJson):
+        def _transform_key(row):
+            if row["_type"] != "session":
+                return None
+            checklist = row.get("behavioralStrategyChecklist")
+            if not isinstance(checklist, dict):
+                return None
+            return checklist.get(keyJson)
+
+        return _transform_key
+
+    behavioralStrategyChecklistEnumMap = {
+        "Behavioral Activation": "behavioralStrategyChecklistBehavioralActivation",
+        "Motivational Interviewing": "behavioralStrategyChecklistMotivationalInterviewing",
+        "Problem Solving Therapy": "behavioralStrategyChecklistProblemSolvingTherapy",
+        "Cognitive Therapy": "behavioralStrategyChecklistCognitiveTherapy",
+        "Mindfulness Strategies": "behavioralStrategyChecklistMindfulnessStrategies",
+        "Supportive Therapy": "behavioralStrategyChecklistSupportiveTherapy",
+        "Other": "behavioralStrategyChecklistOther",
+    }
+
+    # Expand behavioralActivationChecklist (bAChecklistFlags) into one column per flag.
+    def _factory_transform_behavioral_activation_checklist_key(keyJson):
+        def _transform_key(row):
+            if row["_type"] != "session":
+                return None
+            checklist = row.get("behavioralActivationChecklist")
+            if not isinstance(checklist, dict):
+                return None
+            return checklist.get(keyJson)
+
+        return _transform_key
+
+    behavioralActivationChecklistEnumMap = {
+        "Review of the BA model": "behavioralActivationChecklistReviewOfTheBAModel",
+        "Values and goals assessment": "behavioralActivationChecklistValuesAndGoalsAssessment",
+        "Activity scheduling": "behavioralActivationChecklistActivityScheduling",
+        "Mood and activity monitoring": "behavioralActivationChecklistMoodAndActivityMonitoring",
+        "Relaxation": "behavioralActivationChecklistRelaxation",
+        "Positive reinforcement": "behavioralActivationChecklistPositiveReinforcement",
+        "Managing avoidance behaviors": "behavioralActivationChecklistManagingAvoidanceBehaviors",
+        "Problem-solving": "behavioralActivationChecklistProblemSolving",
+    }
+
+    df_documents = df_documents.copy()
+    for (keyJson, keyExport) in behavioralStrategyChecklistEnumMap.items():
+        df_documents[keyExport] = df_documents.apply(
+            _factory_transform_behavioral_strategy_checklist_key(keyJson), axis=1
+        )
+    for (keyJson, keyExport) in behavioralActivationChecklistEnumMap.items():
+        df_documents[keyExport] = df_documents.apply(
+            _factory_transform_behavioral_activation_checklist_key(keyJson), axis=1
+        )
+
+    return df_documents
+
+
+# %% [markdown]
 # ### Documentation: Values
 #
 # Exported from `value` documents. A single row is included for each `value`.
@@ -1857,6 +1929,9 @@ def apply_transforms(
     df_documents = transform_safety_plan(
         df_documents,
     )
+    df_documents = transform_session(
+        df_documents,
+    )
     df_documents = transform_value(
         df_documents,
     )
@@ -1944,6 +2019,7 @@ export_file_list: List[ExportFile] = []
 # - `patientProfiles` is an export of all `profile` documents. Documentation in `patientProfiles.md`.
 # - `reviewMarks` is an export of all `reviewMark` documents. Documentation in `reviewMarks.md`.
 # - `safetyPlans` is an export of all `safetyPlan` documents. Documentation in `safetyPlans.md`.
+# - `sessions` is an export of all `session` documents. Documentation in `sessions.md`.
 # - `values` is an export of all `value` documents. Documentation in `values.md`.
 # - `valuesInventories` is an export of all `valuesInventory` documents. Documentation in `valuesInventories.md`.
 #
@@ -3115,6 +3191,108 @@ def export_analysis_safety_plan():
 
 
 # %% [markdown]
+# ### Analysis: Session
+
+# %%
+def export_analysis_session():
+    # Documentation of this analysis.
+    export_markdown(
+        pathlib.Path("sessions"),
+        documentation_as_markdown("Session"),
+    )
+
+    # Preliminary documents.
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "sessions.raw",
+        ),
+        dataframe_format_export(
+            df_documents_raw.loc[
+                df_documents_raw["_type"] == "session"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "sessions.transformed",
+        ),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "session"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    # Formatted session documents.
+    drop_columns = [
+        "_set_id",
+        "behavioralStrategyChecklist",
+        "behavioralActivationChecklist",
+    ]
+    rename_columns = {
+        "_type": "_docType",
+        "_id": "_docId",
+    }
+    sort_columns = [
+        "_docType",
+        "recordId",
+        "_patientId",
+        "_docId",
+        "sessionId",
+        "_rev",
+        "_created",
+        "date",
+        "sessionType",
+        "billableMinutes",
+        "medicationChange",
+        "currentMedications",
+        "behavioralStrategyChecklistBehavioralActivation",
+        "behavioralStrategyChecklistMotivationalInterviewing",
+        "behavioralStrategyChecklistProblemSolvingTherapy",
+        "behavioralStrategyChecklistCognitiveTherapy",
+        "behavioralStrategyChecklistMindfulnessStrategies",
+        "behavioralStrategyChecklistSupportiveTherapy",
+        "behavioralStrategyChecklistOther",
+        "behavioralStrategyOther",
+        "behavioralActivationChecklistReviewOfTheBAModel",
+        "behavioralActivationChecklistValuesAndGoalsAssessment",
+        "behavioralActivationChecklistActivityScheduling",
+        "behavioralActivationChecklistMoodAndActivityMonitoring",
+        "behavioralActivationChecklistRelaxation",
+        "behavioralActivationChecklistPositiveReinforcement",
+        "behavioralActivationChecklistManagingAvoidanceBehaviors",
+        "behavioralActivationChecklistProblemSolving",
+        "referrals",
+        "otherRecommendations",
+        "sessionNote",
+    ]
+    sort_rows_by_columns = [
+        "recordId",
+        "_patientId",
+        "_created",
+    ]
+
+    export_dataframe(
+        pathlib.Path("sessions"),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_type"] == "session"
+            ],
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+
+# %% [markdown]
 # ### Analysis: Values
 
 # %%
@@ -3274,7 +3452,6 @@ def export_analysis_values_inventory():
 # Document types not yet exported:
 # - scheduledActivity
 # - scheduledAssessment
-# - session
 
 # %%
 export_analysis_activities()
@@ -3288,6 +3465,7 @@ export_analysis_mood_logs()
 export_analysis_patient_profile()
 export_analysis_review_mark()
 export_analysis_safety_plan()
+export_analysis_session()
 export_analysis_values()
 export_analysis_values_inventory()
 
