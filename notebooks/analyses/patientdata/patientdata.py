@@ -26,6 +26,7 @@
 
 # %%
 import dataclasses
+import datetime
 import io
 import itertools
 import json
@@ -48,6 +49,7 @@ import scope.database.date_utils as date_utils
 import scope.enums
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from scope.documents import document_set
+from scope.documents.document_set import datetime_from_document
 from scope.populate.data.archive import Archive
 
 # %% [markdown]
@@ -57,15 +59,15 @@ from scope.populate.data.archive import Archive
 # In development, it can be helpful to sample a subset of patients.
 # If DEVELOPMENT_SAMPLE_PATIENTS <= 0, process all patients.
 # If DEVELOPMENT_SAMPLE_PATIENTS > 0, randomly sample DEVELOPMENT_SAMPLE_PATIENTS patients.
-DEVELOPMENT_SAMPLE_PATIENTS: int = -1
+DEVELOPMENT_SAMPLE_PATIENTS: int = 20
 
 # In development, it can be helpful to skip per-patient export.
 # If DEVELOPMENT_EXPORT_PER_PATIENT_DOCUMENTS, include per-patient export.
-DEVELOPMENT_EXPORT_PER_PATIENT_DOCUMENTS: bool = True
+DEVELOPMENT_EXPORT_PER_PATIENT_DOCUMENTS: bool = False
 
 # In development, it can be helpful to skip documents export.
 # If DEVELOPMENT_EXPORT_COMBINED_DOCUMENTS, include documents export.
-DEVELOPMENT_EXPORT_COMBINED_DOCUMENTS: bool = True
+DEVELOPMENT_EXPORT_COMBINED_DOCUMENTS: bool = False
 
 
 # %% [markdown]
@@ -121,6 +123,12 @@ class ExportFile:
     bytes: Optional[bytes]
     text: Optional[str]
 
+
+# %% [markdown]
+# ### Utility: export_file_list
+
+# %%
+export_file_list: List[ExportFile] = []
 
 # %% [markdown]
 # ### Utility: export_dataframe_as_csv
@@ -744,7 +752,6 @@ def prepare_patient_id_to_documentset():
 
 
 patient_id_to_documentset = prepare_patient_id_to_documentset()
-
 
 # %% [markdown]
 # #### Transform: transform_add_created
@@ -1921,9 +1928,6 @@ def transform_values_inventories(
 # %% [markdown]
 # ### Utility: apply_transforms
 
-# %% [markdown]
-# ### Data: patient_id_to_df_documents
-
 # %%
 def apply_transforms(
     df_documents: pd.DataFrame,
@@ -1980,9 +1984,163 @@ def apply_transforms(
     df_documents = transform_values_inventories(
         df_documents,
     )
-
     return df_documents
 
+# %% [markdown]
+# ### Transform: timeline_documents_from_documentset
+
+# %%
+def timeline_documents_from_documentset(
+    patient_id: str,
+    document_set: document_set.DocumentSet,
+) -> pd.DataFrame:
+    """
+    Build a dataframe of timeline event rows from the DocumentSet only.
+    Caller merges the result with the existing documents dataframe.
+    """
+
+    record_id = patient_id_to_record_id.get(patient_id, "")
+
+    def _calculate_event_study_enrollment() -> Dict[str, object]:
+        """Find final profile, recover enrollment date. Raises if missing."""
+        profile = document_set.filter_match(
+            match_type="profile",
+            match_deleted=False,
+        ).remove_revisions().unique()
+
+        enrollment_date = profile.get("enrollmentDate")
+        if not enrollment_date:
+            raise ValueError("Profile has no enrollmentDate")
+        enrollment_date = date_utils.parse_date(date=enrollment_date).strftime("%Y-%m-%d")
+
+        return {
+            "_docType": "timelineEvent",
+            "recordId": record_id,
+            "_patientId": patient_id,
+            "_timelineDate": enrollment_date,
+            "_timelineEvent": "studyEnrollment",
+        }
+
+    def _calculate_events_assessment_log_by_patient() -> List[Dict[str, object]]:
+        assessment_logs = document_set.filter_match(
+            match_type="assessmentLog",
+            match_deleted=False,
+            match_values={"patientSubmitted": True},
+        )
+
+        events = []
+        for assessment_log in assessment_logs.documents:
+            # Assessment logs are required to have a date.
+            log_date = str(assessment_log["recordedDateTime"])
+            log_date = date_utils.parse_datetime(datetime=log_date).strftime("%Y-%m-%d")
+
+            events.append({
+                "_docType": "timelineEvent",
+                "recordId": record_id,
+                "_patientId": patient_id,
+                "_timelineDate": log_date,
+                "_timelineEvent": "assessmentLogByPatient",
+                "assessmentId": assessment_log["assessmentId"],
+            })
+
+        return events
+
+    def _calculate_events_mood_log_by_patient() -> List[Dict[str, object]]:
+        mood_logs = document_set.filter_match(
+            match_type="moodLog",
+            match_deleted=False,
+        )
+        events = []
+        for log in mood_logs.documents:
+            log_date = str(log["recordedDateTime"])
+            log_date = date_utils.parse_datetime(datetime=log_date).strftime("%Y-%m-%d")
+
+            events.append({
+                "_docType": "timelineEvent",
+                "recordId": record_id,
+                "_patientId": patient_id,
+                "_timelineDate": log_date,
+                "_timelineEvent": "moodLogByPatient",
+            })
+
+        return events
+
+    # def _calculate_event_study_end() -> Optional[Dict[str, object]]:
+    #     """Find first profile with status End; return timeline event dict or None."""
+    #     status_end = scope.enums.DepressionTreatmentStatus.End.value
+    #     profiles_with_end = document_set.filter_match(
+    #         match_type="profile",
+    #         match_deleted=False,
+    #         match_values={"depressionTreatmentStatus": status_end},
+    #     )
+    #     if not profiles_with_end:
+    #         return None
+    #     docs = profiles_with_end.documents
+    #     first_by_time = min(
+    #         docs,
+    #         key=lambda doc: datetime_from_document(document=doc),
+    #     )
+    #     print(json.dumps(first_by_time, indent=2))
+    #     end_date = datetime_from_document(
+    #         document=first_by_time
+    #     ).strftime("%Y-%m-%d")
+    #     return {
+    #         "_docType": "timelineEvent",
+    #         "recordId": record_id,
+    #         "_patientId": patient_id,
+    #         "_timelineEvent": "studyEnd",
+    #         "_timelineDate": end_date,
+    #     }
+
+    # def _calculate_event_study_end_scheduled(event_study_enrollment: Dict[str, object]) -> Dict[str, object]:
+    #     enrollment_date = str(event_study_enrollment["_timelineDate"])
+    #     enrollment_date = datetime.date.fromisoformat(enrollment_date)
+    #     end_scheduled_date = (
+    #         enrollment_date + datetime.timedelta(days=365)
+    #     ).strftime("%Y-%m-%d")
+
+    #     return {
+    #         "_docType": "timelineEvent",
+    #         "recordId": record_id,
+    #         "_patientId": patient_id,
+    #         "_timelineEvent": "studyEndScheduled",
+    #         "_timelineDate": end_scheduled_date,
+    #     }
+
+    event_study_enrollment = _calculate_event_study_enrollment()
+    # event_study_end = _calculate_event_study_end()
+    # event_study_end_scheduled = (
+    #     _calculate_event_study_end_scheduled(event_study_enrollment)
+    #     if event_study_end is None
+    #     else None
+    # )
+
+    events_assessment_log_by_patient = _calculate_events_assessment_log_by_patient()
+    events_mood_log_by_patient = _calculate_events_mood_log_by_patient()
+
+    # Collect events that may be single dicts, lists of dicts, or None.
+    events_raw = [
+        event_study_enrollment,
+        # event_study_end,
+        # event_study_end_scheduled,
+        events_assessment_log_by_patient,
+        events_mood_log_by_patient,
+    ]
+
+    events_normalized: List[Dict[str, object]] = []
+    for event in events_raw:
+        if event is None:
+            continue
+        if isinstance(event, list):
+            events_normalized.extend(event)
+        else:
+            events_normalized.append(event)
+
+    return pd.DataFrame(events_normalized)
+
+
+# %% [markdown]
+# ### Data: patient_id_to_df_documents
 
 # %%
 def prepare_transform_patient_documents():
@@ -1998,9 +2156,17 @@ def prepare_transform_patient_documents():
     for patient_count, (patient_id_current, df_documents_raw_current) in enumerate(
         patient_id_to_df_documents_raw.items()
     ):
-        patient_id_to_df_documents[patient_id_current] = apply_transforms(
+        df_documents_current = apply_transforms(
             df_documents_raw_current.copy(),
             patient_id_to_documentset[patient_id_current],
+        )
+        df_documents_timeline = timeline_documents_from_documentset(
+            patient_id_current,
+            patient_id_to_documentset[patient_id_current],
+        )
+        patient_id_to_df_documents[patient_id_current] = pd.concat(
+            [df_documents_current, df_documents_timeline],
+            ignore_index=True,
         )
 
         progress_patient_count.description = "{}/{}".format(
@@ -2035,7 +2201,7 @@ df_documents = pd.concat(patient_id_to_df_documents.values(), ignore_index=True)
 # ### Reset Export File List
 
 # %%
-export_file_list: List[ExportFile] = []
+export_file_list.clear()
 
 # %% [markdown]
 # ### Documentation: Export
@@ -3654,6 +3820,60 @@ def export_analysis_values_inventories():
         ),
     )
 
+# %% [markdown]
+# ### Analysis: Timeline
+
+# %%
+def export_analysis_timeline():
+    # # Documentation of this analysis.
+    # export_markdown(
+    #     pathlib.Path("timeline"),
+    #     documentation_as_markdown("Timeline"),
+    # )
+
+    # Timeline events are derived only. There is no raw export.
+    export_dataframe(
+        pathlib.Path(
+            "data",
+            "timeline.transformed",
+        ),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_docType"] == "timelineEvent"
+            ],
+            drop_empty_columns=True,
+        ),
+    )
+
+    # Formatted timeline event rows.
+    rename_columns = {}
+    sort_columns = [
+        "_docType",
+        "recordId",
+        "_patientId",
+        "_timelineDate",
+        "_timelineEvent",
+    ]
+    sort_rows_by_columns = [
+        "recordId",
+        "_patientId",
+        "_timelineDate",
+    ]
+
+    export_dataframe(
+        pathlib.Path("timeline"),
+        dataframe_format_export(
+            df_documents.loc[
+                df_documents["_docType"] == "timelineEvent"
+            ],
+            drop_empty_columns=True,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+
 
 # %% [markdown]
 # ### Execute Exports
@@ -3677,6 +3897,8 @@ export_analysis_scheduled_activities()
 export_analysis_sessions()
 export_analysis_values()
 export_analysis_values_inventories()
+
+export_analysis_timeline()
 
 # %% [markdown]
 # ### Write Archive

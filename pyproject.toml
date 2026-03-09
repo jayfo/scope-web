@@ -1,3 +1,6 @@
+[tool.basedpyright]
+extraPaths = ["scope_shared"]
+
 [tool.black]
 target-version = ['py39']
 
