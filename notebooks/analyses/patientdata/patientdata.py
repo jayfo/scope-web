@@ -2851,13 +2851,16 @@ def export_analysis_assessment_logs():
         "_rev",
     ]
 
+    df_gad7 = df_documents.loc[
+        (df_documents["_type"] == "assessmentLog")
+        & (df_documents["assessmentId"] == "gad-7")
+    ]
+    gad7_id_revision_count = df_gad7.groupby("assessmentLogId").size()
+
     export_dataframe(
         pathlib.Path("assessmentLogsGad7"),
         dataframe_format_export(
-            df_documents.loc[
-                (df_documents["_type"] == "assessmentLog")
-                & (df_documents["assessmentId"] == "gad-7")
-            ],
+            df_gad7,
             drop_empty_columns=True,
             drop_columns=drop_columns,
             rename_columns=rename_columns,
@@ -2866,13 +2869,80 @@ def export_analysis_assessment_logs():
         ),
     )
 
+    # GAD-7 assessment logs with only a single revision (never edited).
+    single_revision_gad7_ids = gad7_id_revision_count[gad7_id_revision_count == 1].index
+    df_gad7_single_revision = df_gad7.loc[df_gad7["assessmentLogId"].isin(single_revision_gad7_ids)]
+
+    export_dataframe(
+        pathlib.Path("assessmentLogsGad7NoRevision"),
+        dataframe_format_export(
+            df_gad7_single_revision,
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+    # GAD-7 assessment logs with at least one revision (edited at least once).
+    with_revision_gad7_ids = gad7_id_revision_count[gad7_id_revision_count > 1].index
+    df_gad7_with_revision = df_gad7.loc[df_gad7["assessmentLogId"].isin(with_revision_gad7_ids)]
+
+    export_dataframe(
+        pathlib.Path("assessmentLogsGad7WithRevision"),
+        dataframe_format_export(
+            df_gad7_with_revision,
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+    df_phq9 = df_documents.loc[
+        (df_documents["_type"] == "assessmentLog")
+        & (df_documents["assessmentId"] == "phq-9")
+    ]
+    phq9_id_revision_count = df_phq9.groupby("assessmentLogId").size()
+
     export_dataframe(
         pathlib.Path("assessmentLogsPhq9"),
         dataframe_format_export(
-            df_documents.loc[
-                (df_documents["_type"] == "assessmentLog")
-                & (df_documents["assessmentId"] == "phq-9")
-            ],
+            df_phq9,
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+    # PHQ-9 assessment logs with only a single revision (never edited).
+    single_revision_phq9_ids = phq9_id_revision_count[phq9_id_revision_count == 1].index
+    df_phq9_single_revision = df_phq9.loc[df_phq9["assessmentLogId"].isin(single_revision_phq9_ids)]
+
+    export_dataframe(
+        pathlib.Path("assessmentLogsPhq9NoRevision"),
+        dataframe_format_export(
+            df_phq9_single_revision,
+            drop_empty_columns=True,
+            drop_columns=drop_columns,
+            rename_columns=rename_columns,
+            sort_columns=sort_columns,
+            sort_rows_by_columns=sort_rows_by_columns,
+        ),
+    )
+
+    # PHQ-9 assessment logs with at least one revision (edited at least once).
+    with_revision_phq9_ids = phq9_id_revision_count[phq9_id_revision_count > 1].index
+    df_phq9_with_revision = df_phq9.loc[df_phq9["assessmentLogId"].isin(with_revision_phq9_ids)]
+
+    export_dataframe(
+        pathlib.Path("assessmentLogsPhq9WithRevision"),
+        dataframe_format_export(
+            df_phq9_with_revision,
             drop_empty_columns=True,
             drop_columns=drop_columns,
             rename_columns=rename_columns,
