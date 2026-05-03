@@ -36,7 +36,7 @@ import pathlib
 import pprint
 import re
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, cast
 
 import bson.objectid
 import IPython.display
@@ -59,7 +59,7 @@ from scope.populate.data.archive import Archive
 # In development, it can be helpful to sample a subset of patients.
 # If DEVELOPMENT_SAMPLE_PATIENTS <= 0, process all patients.
 # If DEVELOPMENT_SAMPLE_PATIENTS > 0, randomly sample DEVELOPMENT_SAMPLE_PATIENTS patients.
-DEVELOPMENT_SAMPLE_PATIENTS: int = 20
+DEVELOPMENT_SAMPLE_PATIENTS: int = -1
 
 # In development, it can be helpful to skip per-patient export.
 # If DEVELOPMENT_EXPORT_PER_PATIENT_DOCUMENTS, include per-patient export.
@@ -238,7 +238,7 @@ def export_markdown(
 def dataframe_sanitize(df: pd.DataFrame) -> pd.DataFrame:
     def sanitize_cell(value):
         if isinstance(value, str):
-            value = ILLEGAL_CHARACTERS_RE.sub("?", value)
+            value = ILLEGAL_CHARACTERS_RE.sub("?", value).strip()
 
         return value
 
@@ -291,23 +291,25 @@ def dataframe_format_export(
     if rename_columns:
         df = df.rename(columns=rename_columns)
 
-    # If requested, sort specific columns to the front.
+    # Always sort "_clean" to the front.
+    # If requested, sort other specific columns to the front.
     # Be robust to the possibility that a column is not present.
     # Be robust to the presence of additional columns.
     # Preserve existing order of additional columns after requested columns.
-    if sort_columns:
-        sort_columns = [
-            column_current
-            for column_current in sort_columns
-            if column_current in df.columns
-        ]
-        sort_columns = sort_columns + [
-            column_current
-            for column_current in df.columns
-            if column_current not in sort_columns
-        ]
+    sort_columns = ["_clean"] + (sort_columns or [])
 
-        df = df.loc[:, sort_columns]
+    sort_columns = [
+        column_current
+        for column_current in sort_columns
+        if column_current in df.columns
+    ]
+    sort_columns = sort_columns + [
+        column_current
+        for column_current in df.columns
+        if column_current not in sort_columns
+    ]
+
+    df = df.loc[:, sort_columns]
 
     # If requested, sort rows by specific columns.
     # Be robust to the possibility that a column is not present.
@@ -518,6 +520,139 @@ mrn_to_record_id_bytes, mrn_to_record_id = decrypt_mrn_to_record_id()
 
 
 # %% [markdown]
+# ### Decrypt Cleaning
+#
+# Decrypt one encrypted decision archive and load configured Excel tabs as DataFrames.
+
+# %%
+@dataclasses.dataclass(frozen=True)
+class CleaningArchiveEntry:
+    """Excel path inside `archive_cleaning.zip`, worksheet name, and result field name."""
+
+    name: str
+    file: str
+    tab: str
+
+
+@dataclasses.dataclass
+class CleaningArchiveData:
+    """Named worksheets loaded from `archive_cleaning.zip` (see `cleaning_entries_to_load`)."""
+
+    gad7_no_revision: pd.DataFrame
+    gad7_with_revision: pd.DataFrame
+    phq9_no_revision: pd.DataFrame
+    phq9_with_revision: pd.DataFrame
+
+
+cleaning_archive_path = pathlib.Path(
+    archive_dir_path,
+    "archive_cleaning.zip",
+)
+
+# Each entry points to an Excel file and tab (sheet) inside archive_cleaning.zip.
+# `name` must match a field on `CleaningArchiveData`.
+cleaning_entries_to_load: List[CleaningArchiveEntry] = [
+    CleaningArchiveEntry(
+        name="gad7_no_revision",
+        file="archive_cleaning/GAD7 Cleaning-2026-05-01.xlsx",
+        tab="GAD7 - No Revision",
+    ),
+    CleaningArchiveEntry(
+        name="gad7_with_revision",
+        file="archive_cleaning/GAD7 Cleaning-2026-05-01.xlsx",
+        tab="GAD7 - with Revision for JAMES",
+    ),
+    CleaningArchiveEntry(
+        name="phq9_no_revision",
+        file="archive_cleaning/PHQ9 Cleaning-2026-04-22.xlsx",
+        tab="PHQ9 - No Revisions",
+    ),
+    CleaningArchiveEntry(
+        name="phq9_with_revision",
+        file="archive_cleaning/PHQ9 Cleaning-2026-04-22.xlsx",
+        tab="PHQ9 - Yes Revisions",
+    ),
+]
+
+
+def decrypt_cleaning(
+    *,
+    entries_to_load: List[CleaningArchiveEntry],
+) -> CleaningArchiveData:
+    assert len(entries_to_load) > 0
+    assert cleaning_archive_path.exists()
+
+    expected_names = {
+        field_current.name for field_current in dataclasses.fields(CleaningArchiveData)
+    }
+    entry_names = {entry_current.name for entry_current in entries_to_load}
+    if entry_names != expected_names:
+        raise ValueError(
+            "cleaning_entries_to_load names {} must exactly match CleaningArchiveData fields {}".format(
+                sorted(entry_names),
+                sorted(expected_names),
+            )
+        )
+
+    loaded_by_name: Dict[str, pd.DataFrame] = {}
+    with open(cleaning_archive_path, mode="rb") as archive_file:
+        with pyzipper.AESZipFile(
+            archive_file,
+            "r",
+            compression=pyzipper.ZIP_LZMA,
+            encryption=pyzipper.WZ_AES,
+        ) as archive_zipfile:
+            archive_zipfile.setpassword(archive_password.encode("utf-8"))
+
+            archive_entry_names = set(archive_zipfile.namelist())
+            for entry_current in entries_to_load:
+                entry_file = entry_current.file
+                entry_tab = entry_current.tab
+                if entry_file not in archive_entry_names:
+                    raise ValueError(
+                        "Cleaning archive is missing file entry: {}".format(entry_file)
+                    )
+
+                entry_bytes = archive_zipfile.read(entry_file)
+                with pd.ExcelFile(
+                    io.BytesIO(entry_bytes),
+                    engine="openpyxl",
+                ) as excel_workbook:
+                    sheet_names = excel_workbook.sheet_names
+                    if entry_tab not in sheet_names:
+                        raise ValueError(
+                            "Cleaning worksheet {!r} not found in {!r}. "
+                            "Available sheets (exact names): {!r}".format(
+                                entry_tab,
+                                entry_file,
+                                sheet_names,
+                            )
+                        )
+                    parsed_tab = excel_workbook.parse(
+                        sheet_name=entry_tab,
+                        dtype=str,
+                    )
+                if not isinstance(parsed_tab, pd.DataFrame):
+                    raise ValueError(
+                        "Expected one worksheet for sheet_name={!r}, got {!r}".format(
+                            entry_tab,
+                            type(parsed_tab).__name__,
+                        )
+                    )
+                df_current = parsed_tab.copy()
+                df_current["_cleanSource"] = "{}::{}".format(entry_file, entry_tab)
+                loaded_by_name[entry_current.name] = df_current
+
+    return CleaningArchiveData(**loaded_by_name)
+
+
+# %%
+cleaning_archive_tables = decrypt_cleaning(
+    entries_to_load=cleaning_entries_to_load,
+)
+
+
+# %% [markdown]
 # ## Process Archives
 
 # %% [markdown]
@@ -618,6 +753,437 @@ def patient_documents(row_patient) -> document_set.DocumentSet:
         raise ValueError()
 
     return archive.collection_documents(collection=row_patient["collection"])
+
+
+# %% [markdown]
+# ## Prepare Cleaning
+
+# %% [markdown]
+# ### Utility: build_cleaning_index
+#
+# Each worksheet from `CleaningArchiveData` contributes `CleaningEntry` values.
+# Entries are keyed by `doc_id` (raw `_id`). Duplicate keys across tables raise.
+
+
+# %%
+@dataclasses.dataclass(frozen=True)
+class CleaningColumnEntry:
+    name: str
+    value: str
+
+
+@dataclasses.dataclass(frozen=True)
+class CleaningEntry:
+    """One cleaning decision; `doc_id` matches raw document `_id` / export `_docId`."""
+
+    doc_id: str
+    delete: bool = False
+    reviewed: bool = False
+    clean_columns: Optional[List[CleaningColumnEntry]] = None
+
+    def __post_init__(self) -> None:
+        if not bson.objectid.ObjectId.is_valid(str(self.doc_id)):
+            raise ValueError("CleaningEntry.doc_id is not a valid ObjectId")
+        if self.delete and self.reviewed:
+            raise ValueError(
+                "CleaningEntry cannot be both delete=True and reviewed=True"
+            )
+
+    @property
+    def clean_status(self) -> str:
+        clean_parts: List[str] = []
+        if self.delete:
+            clean_parts.append("_delete")
+        elif self.reviewed:
+            clean_parts.append("_reviewed")
+        if self.clean_columns is not None:
+            clean_parts.extend(
+                "_cleaned[{}]".format(column_current.name)
+                for column_current in self.clean_columns
+            )
+
+        return ":".join(clean_parts)
+
+
+def _normalize_clean_value(cell_clean: object, expected_clean_values: List[str]) -> str:
+    cell_scalar = cast(Any, cell_clean)
+    if pd.isna(cell_scalar):
+        text_raw = ""
+    else:
+        text_raw = str(cell_scalar)
+
+    normalized_current = " ".join(text_raw.split()).lower()
+
+    expected_values = frozenset(expected_clean_values)
+
+    assert normalized_current in expected_values, (
+        "Unexpected _clean value: {!r}".format(cell_clean)
+    )
+
+    return normalized_current
+
+
+def _clean_date_entry_error(
+    date_cell: object,
+    *,
+    doc_id: object,
+    clean_column_name: str,
+) -> Optional[CleaningColumnEntry]:
+    cell_scalar = cast(Any, date_cell)
+    if pd.isna(cell_scalar):
+        date_normalized = ""
+    else:
+        date_normalized = str(cell_scalar).strip()
+
+    cleaned_date_value: Optional[datetime.date] = None
+
+    fix_table = {
+        # Exact `date_normalized` -> cleaned date; extend as needed.
+        "0202-04-14": datetime.date(2022, 4, 14),
+        "9202-08-18 00:00:00": datetime.date(2022, 8, 18),
+        "9202-08-20 00:00:00": datetime.date(2022, 8, 20),
+    }
+
+    if date_normalized in fix_table:
+        cleaned_date_value = fix_table[date_normalized]
+    else:
+        date_for_iso = date_normalized
+        midnight_time_suffix = " 00:00:00"
+        if date_for_iso.endswith(midnight_time_suffix):
+            date_for_iso = date_for_iso[: -len(midnight_time_suffix)]
+
+        try:
+            parsed_date_value = datetime.date.fromisoformat(date_for_iso)
+        except ValueError as exc:
+            raise ValueError(
+                "Unexpected date value for _docId={!r}: {!r}".format(doc_id, date_cell)
+            ) from exc
+
+        parsed_year = parsed_date_value.year
+
+        if parsed_year < 100:
+            cleaned_date_value = datetime.date(
+                year=2000 + parsed_year,
+                month=parsed_date_value.month,
+                day=parsed_date_value.day,
+            )
+        elif 2000 <= parsed_year <= 2026:
+            cleaned_date_value = None
+        else:
+            raise ValueError(
+                "Unexpected date value for _docId={!r}: {!r}".format(doc_id, date_cell),
+            )
+
+    if cleaned_date_value is None:
+        return None
+
+    return CleaningColumnEntry(
+        name=clean_column_name,
+        value=cleaned_date_value.isoformat(),
+    )
+
+
+def print_cleaning_entries_summary(
+    cleaning_table_key: str,
+    cleaning_entries: Sequence[CleaningEntry],
+    *,
+    patched_column_name: str,
+) -> None:
+    entry_count = len(cleaning_entries)
+    delete_entry_count = sum(1 for entry_current in cleaning_entries if entry_current.delete)
+    reviewed_entry_count = sum(1 for entry_current in cleaning_entries if entry_current.reviewed)
+    patched_column_fix_count = sum(
+        1
+        for entry_current in cleaning_entries
+        if entry_current.clean_columns is not None
+        and any(
+            column_current.name == patched_column_name
+            for column_current in entry_current.clean_columns
+        )
+    )
+
+    print(
+        "{cleaning_table_key} cleaning summary:\n"
+        "  entries={entry_count}\n"
+        "  delete={delete_entry_count}\n"
+        "  reviewed={reviewed_entry_count}\n"
+        "  {patched_column_name} column fixes={patched_column_fix_count}".format(
+            cleaning_table_key=cleaning_table_key,
+            entry_count=entry_count,
+            delete_entry_count=delete_entry_count,
+            reviewed_entry_count=reviewed_entry_count,
+            patched_column_name=patched_column_name,
+            patched_column_fix_count=patched_column_fix_count,
+        )
+    )
+
+
+def cleaning_entries_for_gad7_no_revision(
+    cleaning_table_key: str,
+    _df: pd.DataFrame,
+) -> List[CleaningEntry]:
+    if "_docId" not in _df.columns:
+        raise ValueError("Expected _docId column")
+    if "_clean" not in _df.columns:
+        raise ValueError("Expected _clean column")
+    if "recordedDate" not in _df.columns:
+        raise ValueError("Expected recordedDate column")
+
+    cleaning_entries: List[CleaningEntry] = []
+
+    for row_current in _df.to_dict(orient="records"):
+        _normalize_clean_value(row_current["_clean"], ["", "fix date"])
+
+        clean_column = _clean_date_entry_error(
+            row_current["recordedDate"],
+            doc_id=row_current["_docId"],
+            clean_column_name="assessmentLogRecordedDate",
+        )
+
+        cleaning_entries.append(
+            CleaningEntry(
+                doc_id=str(row_current["_docId"]),
+                reviewed=True,  # This file did not include explicit "keep" values.
+                clean_columns=[clean_column] if clean_column is not None else None,
+            )
+        )
+
+    print_cleaning_entries_summary(
+        cleaning_table_key,
+        cleaning_entries,
+        patched_column_name="assessmentLogRecordedDate",
+    )
+
+    return cleaning_entries
+
+
+def cleaning_entries_for_gad7_with_revision(
+    cleaning_table_key: str,
+    _df: pd.DataFrame,
+) -> List[CleaningEntry]:
+    if "_docId" not in _df.columns:
+        raise ValueError("Expected _docId column")
+    if "_clean" not in _df.columns:
+        raise ValueError("Expected _clean column")
+    if "recordedDate" not in _df.columns:
+        raise ValueError("Expected recordedDate column")
+
+    cleaning_entries: List[CleaningEntry] = []
+
+    for row_current in _df.to_dict(orient="records"):
+        clean_normalized = _normalize_clean_value(
+            row_current["_clean"],
+            ["", "delete", "keep"],
+        )
+
+        clean_column = _clean_date_entry_error(
+            row_current["recordedDate"],
+            doc_id=row_current["_docId"],
+            clean_column_name="assessmentLogRecordedDate",
+        )
+        clean_columns_current = [clean_column] if clean_column is not None else None
+
+        cleaning_entries.append(
+            CleaningEntry(
+                doc_id=str(row_current["_docId"]),
+                delete=(clean_normalized == "delete"),
+                reviewed=(clean_normalized == "keep"),
+                clean_columns=clean_columns_current,
+            )
+        )
+
+    print_cleaning_entries_summary(
+        cleaning_table_key,
+        cleaning_entries,
+        patched_column_name="assessmentLogRecordedDate",
+    )
+
+    return cleaning_entries
+
+
+def cleaning_entries_for_phq9_no_revision(
+    cleaning_table_key: str,
+    _df: pd.DataFrame,
+) -> List[CleaningEntry]:
+    if "_docId" not in _df.columns:
+        raise ValueError("Expected _docId column")
+    if "_clean" not in _df.columns:
+        raise ValueError("Expected _clean column")
+    if "recordedDate" not in _df.columns:
+        raise ValueError("Expected recordedDate column")
+
+    cleaning_entries: List[CleaningEntry] = []
+
+    for row_current in _df.to_dict(orient="records"):
+        clean_normalized = _normalize_clean_value(
+            row_current["_clean"],
+            [
+                "",
+                "date format",
+                "date fornat",
+                "delete - keep one on revisions with itemized scores",
+            ],
+        )
+
+        clean_column = _clean_date_entry_error(
+            row_current["recordedDate"],
+            doc_id=row_current["_docId"],
+            clean_column_name="assessmentLogRecordedDate",
+        )
+        clean_columns_current = [clean_column] if clean_column is not None else None
+
+        row_delete = clean_normalized.startswith("delete")
+        cleaning_entries.append(
+            CleaningEntry(
+                doc_id=str(row_current["_docId"]),
+                delete=row_delete,
+                reviewed=not row_delete,  # This file did not include explicit "keep" values.
+                clean_columns=clean_columns_current,
+            )
+        )
+
+    print_cleaning_entries_summary(
+        cleaning_table_key,
+        cleaning_entries,
+        patched_column_name="assessmentLogRecordedDate",
+    )
+
+    return cleaning_entries
+
+
+def cleaning_entries_for_phq9_with_revision(
+    cleaning_table_key: str,
+    _df: pd.DataFrame,
+) -> List[CleaningEntry]:
+    if "_docId" not in _df.columns:
+        raise ValueError("Expected _docId column")
+    if "_clean" not in _df.columns:
+        raise ValueError("Expected _clean column")
+    if "recordedDate" not in _df.columns:
+        raise ValueError("Expected recordedDate column")
+
+    cleaning_entries: List[CleaningEntry] = []
+
+    for row_current in _df.to_dict(orient="records"):
+        clean_normalized = _normalize_clean_value(
+            row_current["_clean"],
+            ["", "delete", "keep"],
+        )
+
+        clean_column = _clean_date_entry_error(
+            row_current["recordedDate"],
+            doc_id=row_current["_docId"],
+            clean_column_name="assessmentLogRecordedDate",
+        )
+        clean_columns_current = [clean_column] if clean_column is not None else None
+
+        cleaning_entries.append(
+            CleaningEntry(
+                doc_id=str(row_current["_docId"]),
+                delete=(clean_normalized == "delete"),
+                reviewed=(clean_normalized == "keep"),
+                clean_columns=clean_columns_current,
+            )
+        )
+
+    print_cleaning_entries_summary(
+        cleaning_table_key,
+        cleaning_entries,
+        patched_column_name="assessmentLogRecordedDate",
+    )
+
+    return cleaning_entries
+
+
+CLEANING_TABLE_ENTRY_BUILDERS: Dict[
+    str,
+    Callable[[str, pd.DataFrame], List[CleaningEntry]],
+] = {
+    "gad7_no_revision": cleaning_entries_for_gad7_no_revision,
+    "gad7_with_revision": cleaning_entries_for_gad7_with_revision,
+    "phq9_no_revision": cleaning_entries_for_phq9_no_revision,
+    "phq9_with_revision": cleaning_entries_for_phq9_with_revision,
+}
+
+
+def build_cleaning_index(
+    cleaning_tables: CleaningArchiveData,
+) -> Dict[str, CleaningEntry]:
+    cleaning_index_by_doc_id: Dict[str, CleaningEntry] = {}
+
+    expected_table_names = {
+        field_current.name for field_current in dataclasses.fields(CleaningArchiveData)
+    }
+    builder_names = set(CLEANING_TABLE_ENTRY_BUILDERS.keys())
+    if expected_table_names != builder_names:
+        raise ValueError(
+            "CleaningArchiveData fields {} must match CLEANING_TABLE_ENTRY_BUILDERS keys {}".format(
+                sorted(expected_table_names),
+                sorted(builder_names),
+            )
+        )
+
+    for field_current in dataclasses.fields(CleaningArchiveData):
+        table_attribute = field_current.name
+        builder_current = CLEANING_TABLE_ENTRY_BUILDERS[table_attribute]
+        df_loaded = getattr(cleaning_tables, table_attribute)
+
+        for entry_current in builder_current(table_attribute, df_loaded):
+            doc_key = str(entry_current.doc_id).strip()
+            if doc_key == "":
+                raise ValueError(
+                    "CleaningEntry has blank doc_id from table {}".format(table_attribute)
+                )
+
+            if doc_key in cleaning_index_by_doc_id:
+                raise ValueError(
+                    "Duplicate CleaningEntry for doc_id {!r}".format(doc_key),
+                )
+
+            if doc_key != entry_current.doc_id:
+                entry_current = dataclasses.replace(entry_current, doc_id=doc_key)
+
+            cleaning_index_by_doc_id[doc_key] = entry_current
+
+    print("Built cleaning index with {} entries.".format(len(cleaning_index_by_doc_id)))
+
+    return cleaning_index_by_doc_id
+
+
+# %% [markdown]
+# ### Utility: apply_cleaning_index
+
+# %%
+def apply_cleaning_index(
+    documents: document_set.DocumentSet,
+    cleaning_index: Dict[str, CleaningEntry],
+) -> document_set.DocumentSet:
+    cleaned_documents = []
+    for document_current in documents.documents:
+        document_cleaned = dict(document_current)
+        document_id_key = str(document_current["_id"])
+        cleaning_entry = cleaning_index.get(document_id_key)
+        clean_status = ""
+
+        if cleaning_entry is not None:
+            clean_status = cleaning_entry.clean_status
+            if cleaning_entry.clean_columns is not None:
+                for clean_column_current in cleaning_entry.clean_columns:
+                    document_cleaned[clean_column_current.name] = clean_column_current.value
+
+        document_cleaned["_clean"] = clean_status
+        cleaned_documents.append(document_cleaned)
+
+    return document_set.DocumentSet(
+        documents=cleaned_documents
+    )
+
+
+# %% [markdown]
+# ### Data: cleaning_index
+
+# %%
+cleaning_index = build_cleaning_index(cleaning_archive_tables)
 
 
 # %% [markdown]
@@ -740,6 +1306,10 @@ def prepare_patient_id_to_documentset():
     ):
         patient_id_current = patient_current["patientId"]
         patient_collection = patient_documents(patient_current.to_dict())
+        patient_collection = apply_cleaning_index(
+            patient_collection,
+            cleaning_index,
+        )
 
         patient_id_to_documentset[patient_id_current] = patient_collection
 
@@ -1484,6 +2054,11 @@ def transform_assessment_logs(
     def _transform_recorded_date(row):
         if row["_type"] != "assessmentLog":
             return row.get("assessmentLogRecordedDate", None)
+
+        # Respect any explicit value already present (e.g., cleaning overrides).
+        recorded_date_existing = row.get("assessmentLogRecordedDate", None)
+        if recorded_date_existing is not None and not pd.isna(recorded_date_existing):
+            return str(recorded_date_existing)
 
         datetime_parsed = date_utils.parse_datetime(datetime=row["recordedDateTime"])
         datetime_pacific = datetime_parsed.astimezone(
