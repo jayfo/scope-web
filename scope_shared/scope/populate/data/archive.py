@@ -7,6 +7,9 @@ import scope.database.document_utils as document_utils
 
 import copy
 import json
+import lzma
+import zlib
+import zipfile
 from pathlib import Path
 import pyzipper
 from typing import Dict, List, Tuple, Union
@@ -51,16 +54,29 @@ class Archive:
                 # Set the zipfile password
                 archive_zipfile.setpassword(password.encode("utf-8"))
 
-                # Confirm the zipfile is valid
-                if archive_zipfile.testzip():
-                    raise ValueError("Invalid archive or password")
-
                 # Load the entries, each item in the zipfile is a document
                 entries: Dict[Path, dict] = {}
                 for info_current in archive_zipfile.infolist():
-                    document_bytes = archive_zipfile.read(info_current)
-                    document_string = document_bytes.decode("utf-8")
-                    document_current = json.loads(document_string)
+                    try:
+                        document_bytes = archive_zipfile.read(info_current)
+                        document_string = document_bytes.decode("utf-8")
+                        document_current = json.loads(document_string)
+                    except (
+                        zipfile.BadZipFile,
+                        OSError,
+                        RuntimeError,
+                        zlib.error,
+                        lzma.LZMAError,
+                        UnicodeDecodeError,
+                        json.JSONDecodeError,
+                    ) as exc:
+                        raise ValueError(
+                            "Invalid archive or password. Could not read member {!r} from {!r}.".format(
+                                info_current.filename,
+                                archive_path,
+                            ),
+                        ) from exc
+
                     document_normalized = document_utils.normalize_document(
                         document=document_current
                     )
