@@ -36,7 +36,7 @@ import pathlib
 import pprint
 import re
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, TypedDict, cast
 
 import bson.objectid
 import IPython.display
@@ -1246,6 +1246,127 @@ def apply_cleaning_index(
 
 
 # %% [markdown]
+# ### Utility: revision presentation for cleaning exports
+#
+# For multi-revision document sets, the first revision keeps full content values.
+# Later revisions blank a content column when the value equals the prior revision.
+
+# %%
+def _normalize_export_series(series: pd.Series) -> pd.Series:
+    normalized = pd.Series("", index=series.index, dtype=object)
+    not_na = series.notna()
+    text = series.loc[not_na].astype(str).str.strip()
+    text = text.mask(text.isin(["nan", "None"]), "")
+    normalized.loc[not_na] = text
+    return normalized
+
+
+def dataframe_blank_columns_unchanged_from_prior_revision(
+    df: pd.DataFrame,
+    *,
+    set_id_column: str,
+    revision_column: str,
+    value_columns: Sequence[str],
+) -> pd.DataFrame:
+    required_columns = [set_id_column, revision_column, *value_columns]
+    missing_columns = [
+        column_current
+        for column_current in required_columns
+        if column_current not in df.columns
+    ]
+    if missing_columns:
+        raise ValueError(
+            "dataframe_blank_columns_unchanged_from_prior_revision missing columns: {}".format(
+                missing_columns,
+            )
+        )
+
+    df = df.copy()
+    df = df.sort_values([set_id_column, revision_column])
+    is_first = (
+        df.groupby(set_id_column, sort=False)[revision_column].transform("min")
+        == df[revision_column]
+    )
+
+    for column_current in value_columns:
+        column_series = cast(pd.Series, df[column_current])
+        prior_values = cast(
+            pd.Series,
+            df.groupby(set_id_column, sort=False)[column_current].shift(1),
+        )
+        equal_prior = _normalize_export_series(
+            column_series
+        ) == _normalize_export_series(prior_values)
+        df.loc[~is_first & equal_prior, column_current] = pd.NA
+
+    return df
+
+
+def dataframe_select_final_revision(
+    df: pd.DataFrame,
+    *,
+    set_id_column: str,
+    revision_column: str,
+    value_columns: Sequence[str],
+) -> pd.DataFrame:
+    """
+    Keep one row per set_id: the last revision whose content differs from the prior revision.
+
+    A set with only the initial revision returns that row.
+    A revision is skipped when every value column matches the previous revision (including
+    trailing no-op edits). Skipped revisions do not block a later revision that does change
+    content; the result is the last such change in the sequence.
+    """
+    required_columns = [set_id_column, revision_column, *value_columns]
+    missing_columns = [
+        column_current
+        for column_current in required_columns
+        if column_current not in df.columns
+    ]
+    if missing_columns:
+        raise ValueError(
+            "dataframe_select_final_revision missing columns: {}".format(
+                missing_columns,
+            )
+        )
+
+    df = df.copy()
+    df = df.sort_values([set_id_column, revision_column])
+
+    selected_groups: List[pd.DataFrame] = []
+    for _, group_current in df.groupby(set_id_column, sort=False):
+        if len(group_current) == 1:
+            selected_groups.append(group_current)
+            continue
+
+        is_first = (
+            group_current[revision_column] == group_current[revision_column].iloc[0]
+        )
+        changed_from_prior = is_first.copy()
+        for column_current in value_columns:
+            column_series = cast(pd.Series, group_current[column_current])
+            prior_values = cast(pd.Series, column_series.shift(1))
+            unequal_prior = _normalize_export_series(
+                column_series
+            ) != _normalize_export_series(prior_values)
+            changed_from_prior = changed_from_prior | (~is_first & unequal_prior)
+
+        meaningful_current = group_current.loc[changed_from_prior]
+        if meaningful_current.empty:
+            raise ValueError(
+                "dataframe_select_final_revision found no revisions for {!r}".format(
+                    group_current[set_id_column].iloc[0],
+                )
+            )
+        selected_groups.append(cast(pd.DataFrame, meaningful_current.tail(1)))
+
+    if not selected_groups:
+        raise ValueError("dataframe_select_final_revision found no rows")
+
+    return pd.concat(selected_groups)
+
+
+# %% [markdown]
 # ### Data: cleaning_index
 
 # %%
@@ -2179,9 +2300,18 @@ def transform_assessment_logs(
 # %% [markdown]
 # ### Documentation: Case Reviews
 #
-# Exported from `caseReview` documents. A single row is included for each `caseReview`.
+# Exported from `caseReview` documents. Includes common fields documented in `commonFields.md`.
 #
-# Includes common fields documented in `commonFields.md`.
+# - `caseReviews` — every revision of each case review, with all content columns populated.
+#   Preliminary tables: `data/caseReviews.raw`, `data/caseReviews.transformed`.
+#
+# - `caseReviewsRevisions` — for inspection of multi-revision case reviews.
+#   The first revision shows full content values.
+#   Later revisions leave a content column empty when it matches the prior revision.
+#
+# - `caseReviewsReviewed` — one row per `caseReviewId`: the last revision in which any
+#   content field changed from the prior revision. A case review with only the initial
+#   revision exports that row. Trailing revisions with no content changes are omitted.
 
 # %% [markdown]
 # ### Transform: transform_case_reviews
@@ -3629,6 +3759,49 @@ def export_analysis_assessment_logs():
 # ### Analysis: Case Reviews
 
 # %%
+class CaseReviewsExportFormat(TypedDict):
+    drop_columns: List[str]
+    rename_columns: Dict[str, str]
+    sort_columns: List[str]
+    sort_rows_by_columns: List[str]
+
+
+CASE_REVIEWS_EXPORT_FORMAT: CaseReviewsExportFormat = {
+    "drop_columns": [
+        "_set_id",
+    ],
+    "rename_columns": {
+        "_type": "_docType",
+        "_id": "_docId",
+        "date": "caseReviewDate",
+    },
+    "sort_columns": [
+        "_docType",
+        "recordId",
+        "_patientId",
+        "_docId",
+        "caseReviewId",
+        "_rev",
+        "_created",
+        "caseReviewDate",
+        "consultingPsychiatrist",
+        "behavioralStrategyChange",
+        "medicationChange",
+        "otherRecommendations",
+        "referralsChange",
+        "reviewNote",
+    ],
+    "sort_rows_by_columns": [
+        "recordId",
+        "_patientId",
+        "caseReviewDate",
+        "caseReviewId",
+        "_rev",
+    ],
+}
+
+
+# %%
 def export_analysis_case_reviews():
     # Documentation of this analysis.
     export_markdown(
@@ -3664,50 +3837,103 @@ def export_analysis_case_reviews():
     )
 
     # Formatted caseReview documents.
-    drop_columns = [
-        "_set_id",
-    ]
-    rename_columns = {
-        "_type": "_docType",
-        "_id": "_docId",
-        "date": "caseReviewDate",
-    }
-    sort_columns = [
-        "_docType",
-        "recordId",
-        "_patientId",
-        "_docId",
-        "caseReviewId",
-        "_rev",
-        "_created",
-        "caseReviewDate",
-        "consultingPsychiatrist",
-        "behavioralStrategyChange",
-        "medicationChange",
-        "otherRecommendations",
-        "referralsChange",
-        "reviewNote",
-    ]
-    sort_rows_by_columns = [
-        "recordId",
-        "_patientId",
-        "caseReviewDate",
-        "caseReviewId",
-        "_rev",
-    ]
-
     export_dataframe(
         pathlib.Path("caseReviews"),
         dataframe_format_export(
-            df_documents.loc[
-                df_documents["_type"] == "caseReview"
-            ],
+            df_documents.loc[df_documents["_type"] == "caseReview"],
             drop_empty_columns=True,
-            drop_columns=drop_columns,
-            rename_columns=rename_columns,
-            sort_columns=sort_columns,
-            sort_rows_by_columns=sort_rows_by_columns,
+            drop_columns=CASE_REVIEWS_EXPORT_FORMAT["drop_columns"],
+            rename_columns=CASE_REVIEWS_EXPORT_FORMAT["rename_columns"],
+            sort_columns=CASE_REVIEWS_EXPORT_FORMAT["sort_columns"],
+            sort_rows_by_columns=CASE_REVIEWS_EXPORT_FORMAT["sort_rows_by_columns"],
         ),
+    )
+
+
+# %% [markdown]
+# ### Analysis: Case Reviews Revisions
+
+# %%
+CASE_REVIEW_REVISION_VALUE_COLUMNS = [
+    "caseReviewDate",
+    "consultingPsychiatrist",
+    "behavioralStrategyChange",
+    "medicationChange",
+    "otherRecommendations",
+    "referralsChange",
+    "reviewNote",
+]
+
+
+# %%
+def export_analysis_case_reviews_revisions():
+    df_case_reviews = dataframe_format_export(
+        df_documents.loc[df_documents["_type"] == "caseReview"],
+        drop_empty_columns=True,
+        drop_columns=CASE_REVIEWS_EXPORT_FORMAT["drop_columns"],
+        rename_columns=CASE_REVIEWS_EXPORT_FORMAT["rename_columns"],
+        sort_columns=CASE_REVIEWS_EXPORT_FORMAT["sort_columns"],
+        sort_rows_by_columns=CASE_REVIEWS_EXPORT_FORMAT["sort_rows_by_columns"],
+    )
+    df_case_reviews = dataframe_blank_columns_unchanged_from_prior_revision(
+        df_case_reviews,
+        set_id_column="caseReviewId",
+        revision_column="_rev",
+        value_columns=CASE_REVIEW_REVISION_VALUE_COLUMNS,
+    )
+
+    export_dataframe(
+        pathlib.Path("caseReviewsRevisions"),
+        df_case_reviews,
+    )
+
+
+# %% [markdown]
+# ### Analysis: Case Reviews Reviewed
+
+# %%
+def export_analysis_case_reviews_reviewed():
+    df_case_reviews = dataframe_format_export(
+        df_documents.loc[df_documents["_type"] == "caseReview"],
+        drop_empty_columns=True,
+        drop_columns=CASE_REVIEWS_EXPORT_FORMAT["drop_columns"],
+        rename_columns=CASE_REVIEWS_EXPORT_FORMAT["rename_columns"],
+        sort_columns=CASE_REVIEWS_EXPORT_FORMAT["sort_columns"],
+        sort_rows_by_columns=CASE_REVIEWS_EXPORT_FORMAT["sort_rows_by_columns"],
+    )
+    df_case_reviews = dataframe_select_final_revision(
+        df_case_reviews,
+        set_id_column="caseReviewId",
+        revision_column="_rev",
+        value_columns=CASE_REVIEW_REVISION_VALUE_COLUMNS,
+    )
+
+    revision_count_per_case_review = cast(
+        pd.Series,
+        df_case_reviews.groupby("caseReviewId").size(),
+    )
+    if len(revision_count_per_case_review) != len(df_case_reviews):
+        raise ValueError(
+            "caseReviewsReviewed must have exactly one row per caseReviewId; "
+            "row count {} != distinct caseReviewId count {}".format(
+                len(df_case_reviews),
+                len(revision_count_per_case_review),
+            )
+        )
+    if not (revision_count_per_case_review == 1).all():
+        raise ValueError(
+            "caseReviewsReviewed must have exactly one row per caseReviewId"
+        )
+
+    print(
+        "caseReviewsReviewed: {} case reviews, 1 row each.".format(
+            len(revision_count_per_case_review),
+        )
+    )
+
+    export_dataframe(
+        pathlib.Path("caseReviewsReviewed"),
+        df_case_reviews,
     )
 
 
@@ -4630,6 +4856,8 @@ export_analysis_activity_schedules()
 export_analysis_assessments()
 export_analysis_assessment_logs()
 export_analysis_case_reviews()
+export_analysis_case_reviews_revisions()
+export_analysis_case_reviews_reviewed()
 export_analysis_clinical_histories()
 export_analysis_mood_logs()
 export_analysis_patient_profiles()
