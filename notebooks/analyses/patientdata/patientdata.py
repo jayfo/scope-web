@@ -36,7 +36,7 @@ import pathlib
 import pprint
 import re
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, TypedDict, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, TypedDict, cast
 
 import bson.objectid
 import IPython.display
@@ -59,15 +59,15 @@ from scope.populate.data.archive import Archive
 # In development, it can be helpful to sample a subset of patients.
 # If DEVELOPMENT_SAMPLE_PATIENTS <= 0, process all patients.
 # If DEVELOPMENT_SAMPLE_PATIENTS > 0, randomly sample DEVELOPMENT_SAMPLE_PATIENTS patients.
-DEVELOPMENT_SAMPLE_PATIENTS: int = -1
+DEVELOPMENT_SAMPLE_PATIENTS: int = 25
 
 # In development, it can be helpful to skip per-patient export.
 # If DEVELOPMENT_EXPORT_PER_PATIENT_DOCUMENTS, include per-patient export.
-DEVELOPMENT_EXPORT_PER_PATIENT_DOCUMENTS: bool = True
+DEVELOPMENT_EXPORT_PER_PATIENT_DOCUMENTS: bool = False
 
 # In development, it can be helpful to skip documents export.
 # If DEVELOPMENT_EXPORT_COMBINED_DOCUMENTS, include documents export.
-DEVELOPMENT_EXPORT_COMBINED_DOCUMENTS: bool = True
+DEVELOPMENT_EXPORT_COMBINED_DOCUMENTS: bool = False
 
 
 # %% [markdown]
@@ -2758,6 +2758,240 @@ def apply_transforms(
     return df_documents
 
 # %% [markdown]
+# ### Timeline event type
+#
+# Each export row uses a fixed set of columns for inspection and document lookup.
+# `timelineData` is optional JSON. While debugging, builders pass the full source document.
+
+# %%
+@dataclasses.dataclass(frozen=True)
+class TimelineEvent:
+    record_id: str
+    patient_id: str
+    timeline_date: str
+    timeline_event: str
+    source_doc_id: str
+    source_set_id: Optional[str] = None
+    timeline_data: Optional[Dict[str, object]] = None
+
+    def to_row(self) -> Dict[str, object]:
+        row: Dict[str, object] = {
+            "_docType": "timelineEvent",
+            "recordId": self.record_id,
+            "_patientId": self.patient_id,
+            "timelineDate": self.timeline_date,
+            "timelineEvent": self.timeline_event,
+            "_sourceDocId": self.source_doc_id,
+        }
+        if self.source_set_id is not None:
+            row["_sourceSetId"] = self.source_set_id
+        if self.timeline_data:
+            row["timelineData"] = json.dumps(self.timeline_data, sort_keys=True)
+        return row
+
+
+def _timeline_date_from_recorded_datetime(*, recorded_datetime: str) -> str:
+    return date_utils.parse_datetime(datetime=recorded_datetime).strftime("%Y-%m-%d")
+
+
+def _timeline_date_from_date(*, date: str) -> str:
+    return date_utils.parse_date(date=date).strftime("%Y-%m-%d")
+
+
+def _timeline_events_to_rows(events: Iterable[TimelineEvent]) -> List[Dict[str, object]]:
+    return [event_current.to_row() for event_current in events]
+
+
+def _timeline_event(
+    *,
+    record_id: str,
+    patient_id: str,
+    timeline_date: str,
+    timeline_event: str,
+    source_doc_id: str,
+    source_set_id: Optional[str] = None,
+    timeline_data: Optional[Dict[str, object]] = None,
+) -> TimelineEvent:
+    return TimelineEvent(
+        record_id=record_id,
+        patient_id=patient_id,
+        timeline_date=timeline_date,
+        timeline_event=timeline_event,
+        source_doc_id=source_doc_id,
+        source_set_id=source_set_id,
+        timeline_data=timeline_data,
+    )
+
+
+def _timeline_activity_log_events(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> List[TimelineEvent]:
+    activity_logs = documents.filter_match(
+        match_type="activityLog",
+        match_deleted=False,
+    ).remove_revisions()
+
+    assert all(
+        document.get("_rev", 1) == 1 for document in activity_logs.documents
+    ), "Unexpected revision for activityLog"
+
+    return [
+        _timeline_event(
+            record_id=record_id,
+            patient_id=patient_id,
+            timeline_date=_timeline_date_from_recorded_datetime(
+                recorded_datetime=str(document["recordedDateTime"]),
+            ),
+            timeline_event="activityLog",
+            source_doc_id=str(document["_id"]),
+            source_set_id=str(document["_set_id"]),
+        )
+        for document in activity_logs.documents
+    ]
+
+
+def _timeline_assessment_log_by_patient_events(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> List[TimelineEvent]:
+    assessment_logs = documents.filter_match(
+        match_type="assessmentLog",
+        match_deleted=False,
+        match_values={"patientSubmitted": True},
+    ).remove_revisions()
+
+    # Logs were sometimes modified, but then they would no longer be patientSubmitted.
+    assert all(
+        document.get("_rev", 1) == 1 for document in assessment_logs.documents
+    ), "Unexpected revision for assessmentLog"
+
+    return [
+        _timeline_event(
+            record_id=record_id,
+            patient_id=patient_id,
+            timeline_date=_timeline_date_from_recorded_datetime(
+                recorded_datetime=str(assessment_log["recordedDateTime"]),
+            ),
+            timeline_event="assessmentLog",
+            source_doc_id=str(assessment_log["_id"]),
+            source_set_id=str(assessment_log["_set_id"]),
+            timeline_data={
+                "assessmentId": assessment_log["assessmentId"],
+                "patientSubmitted": assessment_log["patientSubmitted"],
+            },
+        )
+        for assessment_log in assessment_logs.documents
+    ]
+
+
+def _timeline_case_review_events(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> List[TimelineEvent]:
+    case_reviews = documents.filter_match(
+        match_type="caseReview",
+        match_deleted=False,
+    ).remove_revisions()
+
+    return [
+        _timeline_event(
+            record_id=record_id,
+            patient_id=patient_id,
+            timeline_date=_timeline_date_from_date(date=str(case_review["date"])),
+            timeline_event="caseReview",
+            source_doc_id=str(case_review["_id"]),
+            source_set_id=str(case_review["_set_id"]),
+        )
+        for case_review in case_reviews.documents
+    ]
+
+
+def _timeline_mood_log_events(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> List[TimelineEvent]:
+    mood_logs = documents.filter_match(
+        match_type="moodLog",
+        match_deleted=False,
+    ).remove_revisions()
+
+    assert all(
+        document.get("_rev", 1) == 1 for document in mood_logs.documents
+    ), "Unexpected revision for moodLog"
+
+    return [
+        _timeline_event(
+            record_id=record_id,
+            patient_id=patient_id,
+            timeline_date=_timeline_date_from_recorded_datetime(
+                recorded_datetime=str(document["recordedDateTime"]),
+            ),
+            timeline_event="moodLog",
+            source_doc_id=str(document["_id"]),
+            source_set_id=str(document["_set_id"]),
+        )
+        for document in mood_logs.documents
+    ]
+
+
+def _timeline_session_events(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> List[TimelineEvent]:
+    sessions = documents.filter_match(
+        match_type="session",
+        match_deleted=False,
+    ).remove_revisions()
+
+    return [
+        _timeline_event(
+            record_id=record_id,
+            patient_id=patient_id,
+            timeline_date=_timeline_date_from_date(date=str(session["date"])),
+            timeline_event="session",
+            source_doc_id=str(session["_id"]),
+            source_set_id=str(session["_set_id"]),
+        )
+        for session in sessions.documents
+    ]
+
+
+def _timeline_study_enrollment_event(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> TimelineEvent:
+    profile = documents.filter_match(
+        match_type="profile",
+        match_deleted=False,
+    ).remove_revisions().unique()
+
+    enrollment_date = profile.get("enrollmentDate")
+    if not enrollment_date:
+        raise ValueError("Profile has no enrollmentDate")
+
+    return _timeline_event(
+        record_id=record_id,
+        patient_id=patient_id,
+        timeline_date=_timeline_date_from_date(date=str(enrollment_date)),
+        timeline_event="studyEnrollment",
+        source_doc_id=str(profile["_id"]),
+    )
+
+
+# %% [markdown]
 # ### Transform: timeline_documents_from_documentset
 
 # %%
@@ -2772,142 +3006,56 @@ def timeline_documents_from_documentset(
 
     record_id = patient_id_to_record_id.get(patient_id, "")
 
-    def _calculate_event_study_enrollment() -> Dict[str, object]:
-        """Find final profile, recover enrollment date. Raises if missing."""
-        profile = document_set.filter_match(
-            match_type="profile",
-            match_deleted=False,
-        ).remove_revisions().unique()
+    # def _timeline_study_end_event(...) -> Optional[StudyEndTimelineEvent]:
+    # def _timeline_study_end_scheduled_event(
+    #     enrollment: StudyEnrollmentTimelineEvent,
+    # ) -> StudyEndScheduledTimelineEvent:
 
-        enrollment_date = profile.get("enrollmentDate")
-        if not enrollment_date:
-            raise ValueError("Profile has no enrollmentDate")
-        enrollment_date = date_utils.parse_date(date=enrollment_date).strftime("%Y-%m-%d")
-
-        return {
-            "_docType": "timelineEvent",
-            "recordId": record_id,
-            "_patientId": patient_id,
-            "_timelineDate": enrollment_date,
-            "_timelineEvent": "studyEnrollment",
-        }
-
-    def _calculate_events_assessment_log_by_patient() -> List[Dict[str, object]]:
-        assessment_logs = document_set.filter_match(
-            match_type="assessmentLog",
-            match_deleted=False,
-            match_values={"patientSubmitted": True},
+    timeline_events: List[TimelineEvent] = []
+    timeline_events.extend(
+        _timeline_activity_log_events(
+            patient_id=patient_id,
+            record_id=record_id,
+            documents=document_set,
         )
-
-        events = []
-        for assessment_log in assessment_logs.documents:
-            # Assessment logs are required to have a date.
-            log_date = str(assessment_log["recordedDateTime"])
-            log_date = date_utils.parse_datetime(datetime=log_date).strftime("%Y-%m-%d")
-
-            events.append({
-                "_docType": "timelineEvent",
-                "recordId": record_id,
-                "_patientId": patient_id,
-                "_timelineDate": log_date,
-                "_timelineEvent": "assessmentLogByPatient",
-                "assessmentId": assessment_log["assessmentId"],
-            })
-
-        return events
-
-    def _calculate_events_mood_log_by_patient() -> List[Dict[str, object]]:
-        mood_logs = document_set.filter_match(
-            match_type="moodLog",
-            match_deleted=False,
+    )
+    timeline_events.extend(
+        _timeline_assessment_log_by_patient_events(
+            patient_id=patient_id,
+            record_id=record_id,
+            documents=document_set,
         )
-        events = []
-        for log in mood_logs.documents:
-            log_date = str(log["recordedDateTime"])
-            log_date = date_utils.parse_datetime(datetime=log_date).strftime("%Y-%m-%d")
+    )
+    timeline_events.extend(
+        _timeline_case_review_events(
+            patient_id=patient_id,
+            record_id=record_id,
+            documents=document_set,
+        )
+    )
+    timeline_events.extend(
+        _timeline_mood_log_events(
+            patient_id=patient_id,
+            record_id=record_id,
+            documents=document_set,
+        )
+    )
+    timeline_events.extend(
+        _timeline_session_events(
+            patient_id=patient_id,
+            record_id=record_id,
+            documents=document_set,
+        )
+    )
+    timeline_events.append(
+        _timeline_study_enrollment_event(
+            patient_id=patient_id,
+            record_id=record_id,
+            documents=document_set,
+        )
+    )
 
-            events.append({
-                "_docType": "timelineEvent",
-                "recordId": record_id,
-                "_patientId": patient_id,
-                "_timelineDate": log_date,
-                "_timelineEvent": "moodLogByPatient",
-            })
-
-        return events
-
-    # def _calculate_event_study_end() -> Optional[Dict[str, object]]:
-    #     """Find first profile with status End; return timeline event dict or None."""
-    #     status_end = scope.enums.DepressionTreatmentStatus.End.value
-    #     profiles_with_end = document_set.filter_match(
-    #         match_type="profile",
-    #         match_deleted=False,
-    #         match_values={"depressionTreatmentStatus": status_end},
-    #     )
-    #     if not profiles_with_end:
-    #         return None
-    #     docs = profiles_with_end.documents
-    #     first_by_time = min(
-    #         docs,
-    #         key=lambda doc: datetime_from_document(document=doc),
-    #     )
-    #     print(json.dumps(first_by_time, indent=2))
-    #     end_date = datetime_from_document(
-    #         document=first_by_time
-    #     ).strftime("%Y-%m-%d")
-    #     return {
-    #         "_docType": "timelineEvent",
-    #         "recordId": record_id,
-    #         "_patientId": patient_id,
-    #         "_timelineEvent": "studyEnd",
-    #         "_timelineDate": end_date,
-    #     }
-
-    # def _calculate_event_study_end_scheduled(event_study_enrollment: Dict[str, object]) -> Dict[str, object]:
-    #     enrollment_date = str(event_study_enrollment["_timelineDate"])
-    #     enrollment_date = datetime.date.fromisoformat(enrollment_date)
-    #     end_scheduled_date = (
-    #         enrollment_date + datetime.timedelta(days=365)
-    #     ).strftime("%Y-%m-%d")
-
-    #     return {
-    #         "_docType": "timelineEvent",
-    #         "recordId": record_id,
-    #         "_patientId": patient_id,
-    #         "_timelineEvent": "studyEndScheduled",
-    #         "_timelineDate": end_scheduled_date,
-    #     }
-
-    event_study_enrollment = _calculate_event_study_enrollment()
-    # event_study_end = _calculate_event_study_end()
-    # event_study_end_scheduled = (
-    #     _calculate_event_study_end_scheduled(event_study_enrollment)
-    #     if event_study_end is None
-    #     else None
-    # )
-
-    events_assessment_log_by_patient = _calculate_events_assessment_log_by_patient()
-    events_mood_log_by_patient = _calculate_events_mood_log_by_patient()
-
-    # Collect events that may be single dicts, lists of dicts, or None.
-    events_raw = [
-        event_study_enrollment,
-        # event_study_end,
-        # event_study_end_scheduled,
-        events_assessment_log_by_patient,
-        events_mood_log_by_patient,
-    ]
-
-    events_normalized: List[Dict[str, object]] = []
-    for event in events_raw:
-        if event is None:
-            continue
-        if isinstance(event, list):
-            events_normalized.extend(event)
-        else:
-            events_normalized.append(event)
-
-    return pd.DataFrame(events_normalized)
+    return pd.DataFrame(_timeline_events_to_rows(timeline_events))
 
 
 # %% [markdown]
@@ -4820,13 +4968,16 @@ def export_analysis_timeline():
         "_docType",
         "recordId",
         "_patientId",
-        "_timelineDate",
-        "_timelineEvent",
+        "_sourceDocId",
+        "_sourceSetId",
+        "timelineDate",
+        "timelineEvent",
+        "timelineData",
     ]
     sort_rows_by_columns = [
         "recordId",
         "_patientId",
-        "_timelineDate",
+        "timelineDate",
     ]
 
     export_dataframe(
