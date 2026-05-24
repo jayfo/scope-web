@@ -2770,8 +2770,9 @@ class TimelineEvent:
     patient_id: str
     timeline_date: str
     timeline_event: str
+    source_set_id: Optional[str]
     source_doc_id: str
-    source_set_id: Optional[str] = None
+    source_rev: int
     timeline_data: Optional[Dict[str, object]] = None
 
     def to_row(self) -> Dict[str, object]:
@@ -2781,10 +2782,11 @@ class TimelineEvent:
             "_patientId": self.patient_id,
             "timelineDate": self.timeline_date,
             "timelineEvent": self.timeline_event,
-            "_sourceDocId": self.source_doc_id,
         }
         if self.source_set_id is not None:
             row["_sourceSetId"] = self.source_set_id
+        row["_sourceDocId"] = self.source_doc_id
+        row["_sourceRev"] = self.source_rev
         if self.timeline_data:
             row["timelineData"] = json.dumps(self.timeline_data, sort_keys=True)
         return row
@@ -2808,8 +2810,9 @@ def _timeline_event(
     patient_id: str,
     timeline_date: str,
     timeline_event: str,
-    source_doc_id: str,
     source_set_id: Optional[str] = None,
+    source_doc_id: str,
+    source_rev: int,
     timeline_data: Optional[Dict[str, object]] = None,
 ) -> TimelineEvent:
     return TimelineEvent(
@@ -2817,8 +2820,9 @@ def _timeline_event(
         patient_id=patient_id,
         timeline_date=timeline_date,
         timeline_event=timeline_event,
-        source_doc_id=source_doc_id,
         source_set_id=source_set_id,
+        source_doc_id=source_doc_id,
+        source_rev=source_rev,
         timeline_data=timeline_data,
     )
 
@@ -2856,8 +2860,9 @@ def _timeline_activity_lifecycle_events(
                     patient_id=patient_id,
                     timeline_date=timeline_date,
                     timeline_event=timeline_event,
-                    source_doc_id=str(revision["_id"]),
                     source_set_id=str(revision["_set_id"]),
+                    source_doc_id=str(revision["_id"]),
+                    source_rev=int(revision["_rev"]),
                 )
             )
     return events
@@ -2886,8 +2891,9 @@ def _timeline_activity_log_events(
                 recorded_datetime=str(document["recordedDateTime"]),
             ),
             timeline_event="activityLog",
-            source_doc_id=str(document["_id"]),
             source_set_id=str(document["_set_id"]),
+            source_doc_id=str(document["_id"]),
+            source_rev=int(document["_rev"]),
         )
         for document in activity_logs.documents
     ]
@@ -2926,10 +2932,72 @@ def _timeline_activity_schedule_lifecycle_events(
                     patient_id=patient_id,
                     timeline_date=timeline_date,
                     timeline_event=timeline_event,
-                    source_doc_id=str(revision["_id"]),
                     source_set_id=str(revision["_set_id"]),
+                    source_doc_id=str(revision["_id"]),
+                    source_rev=int(revision["_rev"]),
                 )
             )
+    return events
+
+
+def _timeline_assessment_lifecycle_events(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> List[TimelineEvent]:
+    events: List[TimelineEvent] = []
+    assessments = documents.filter_match(match_type="assessment")
+    for revision_group in assessments.group_revisions().values():
+        prior_revision = None
+        for revision in revision_group.order_by_revision():
+            if revision.get("_deleted", False):
+                # Delete revisions are set-tombstone documents with no assignedDateTime.
+                timeline_event = "assessmentCanceled"
+                timeline_date = datetime_from_document(document=revision).strftime(
+                    "%Y-%m-%d"
+                )
+            elif revision["assigned"]:
+                if prior_revision is None or not prior_revision.get("assigned", False):
+                    timeline_event = "assessmentAssigned"
+                else:
+                    timeline_event = "assessmentEdited"
+                timeline_date = _timeline_date_from_recorded_datetime(
+                    recorded_datetime=str(revision["assignedDateTime"]),
+                )
+            elif (
+                prior_revision is not None
+                and prior_revision.get("assigned", False)
+            ):
+                timeline_event = "assessmentCanceled"
+                timeline_date = _timeline_date_from_recorded_datetime(
+                    recorded_datetime=str(revision["assignedDateTime"]),
+                )
+            else:
+                prior_revision = revision
+                continue
+
+            timeline_data: Dict[str, object] = {
+                "assessmentId": revision["assessmentId"],
+            }
+            if "dayOfWeek" in revision:
+                timeline_data["dayOfWeek"] = revision["dayOfWeek"]
+            if "frequency" in revision:
+                timeline_data["frequency"] = revision["frequency"]
+
+            events.append(
+                _timeline_event(
+                    record_id=record_id,
+                    patient_id=patient_id,
+                    timeline_date=timeline_date,
+                    timeline_event=timeline_event,
+                    source_set_id=str(revision["_set_id"]),
+                    source_doc_id=str(revision["_id"]),
+                    source_rev=int(revision["_rev"]),
+                    timeline_data=timeline_data,
+                )
+            )
+            prior_revision = revision
     return events
 
 
@@ -2958,8 +3026,9 @@ def _timeline_assessment_log_by_patient_events(
                 recorded_datetime=str(assessment_log["recordedDateTime"]),
             ),
             timeline_event="assessmentLog",
-            source_doc_id=str(assessment_log["_id"]),
             source_set_id=str(assessment_log["_set_id"]),
+            source_doc_id=str(assessment_log["_id"]),
+            source_rev=int(assessment_log["_rev"]),
             timeline_data={
                 "assessmentId": assessment_log["assessmentId"],
                 "patientSubmitted": assessment_log["patientSubmitted"],
@@ -2986,8 +3055,9 @@ def _timeline_case_review_events(
             patient_id=patient_id,
             timeline_date=_timeline_date_from_date(date=str(case_review["date"])),
             timeline_event="caseReview",
-            source_doc_id=str(case_review["_id"]),
             source_set_id=str(case_review["_set_id"]),
+            source_doc_id=str(case_review["_id"]),
+            source_rev=int(case_review["_rev"]),
         )
         for case_review in case_reviews.documents
     ]
@@ -3016,8 +3086,9 @@ def _timeline_mood_log_events(
                 recorded_datetime=str(document["recordedDateTime"]),
             ),
             timeline_event="moodLog",
-            source_doc_id=str(document["_id"]),
             source_set_id=str(document["_set_id"]),
+            source_doc_id=str(document["_id"]),
+            source_rev=int(document["_rev"]),
         )
         for document in mood_logs.documents
     ]
@@ -3040,8 +3111,9 @@ def _timeline_session_events(
             patient_id=patient_id,
             timeline_date=_timeline_date_from_date(date=str(session["date"])),
             timeline_event="session",
-            source_doc_id=str(session["_id"]),
             source_set_id=str(session["_set_id"]),
+            source_doc_id=str(session["_id"]),
+            source_rev=int(session["_rev"]),
         )
         for session in sessions.documents
     ]
@@ -3067,7 +3139,9 @@ def _timeline_study_enrollment_event(
         patient_id=patient_id,
         timeline_date=_timeline_date_from_date(date=str(enrollment_date)),
         timeline_event="studyEnrollment",
+        source_set_id=None,
         source_doc_id=str(profile["_id"]),
+        source_rev=int(profile["_rev"]),
     )
 
 
@@ -3104,8 +3178,9 @@ def _timeline_value_lifecycle_events(
                     patient_id=patient_id,
                     timeline_date=timeline_date,
                     timeline_event=timeline_event,
-                    source_doc_id=str(revision["_id"]),
                     source_set_id=str(revision["_set_id"]),
+                    source_doc_id=str(revision["_id"]),
+                    source_rev=int(revision["_rev"]),
                 )
             )
     return events
@@ -3148,6 +3223,13 @@ def timeline_documents_from_documentset(
     )
     timeline_events.extend(
         _timeline_activity_schedule_lifecycle_events(
+            patient_id=patient_id,
+            record_id=record_id,
+            documents=document_set,
+        )
+    )
+    timeline_events.extend(
+        _timeline_assessment_lifecycle_events(
             patient_id=patient_id,
             record_id=record_id,
             documents=document_set,
@@ -5109,8 +5191,9 @@ def export_analysis_timeline():
         "_docType",
         "recordId",
         "_patientId",
-        "_sourceDocId",
         "_sourceSetId",
+        "_sourceDocId",
+        "_sourceRev",
         "timelineDate",
         "timelineEvent",
         "timelineData",
