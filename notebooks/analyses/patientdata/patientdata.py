@@ -36,7 +36,19 @@ import pathlib
 import pprint
 import re
 from enum import Enum
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, TypedDict, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    TypedDict,
+    cast,
+)
 
 import bson.objectid
 import IPython.display
@@ -2758,6 +2770,52 @@ def apply_transforms(
     return df_documents
 
 # %% [markdown]
+# ### scope-web version publications
+#
+# Sequential study-site deployments (`fredhutch`, `multicare`, `scca`; `multicare` and
+# `scca` only before v0.9.0). Each row is the first day that version was live; the next
+# version's `publishedDate` supersedes it.
+#
+# Source: https://github.com/uwscope/scope-web/releases
+
+# %%
+@dataclasses.dataclass(frozen=True)
+class ScopeVersionPublication:
+    version: str
+    published_date: str
+
+
+SCOPE_VERSION_PUBLICATIONS: Tuple[ScopeVersionPublication, ...] = (
+    ScopeVersionPublication("v0.1.0", "2022-03-21"),
+    ScopeVersionPublication("v0.2.0", "2022-04-17"),
+    ScopeVersionPublication("v0.3.0", "2022-06-11"),
+    ScopeVersionPublication("v0.4.0", "2022-06-19"),
+    ScopeVersionPublication("v0.5.0", "2022-08-15"),
+    ScopeVersionPublication("v0.6.0", "2022-08-29"),
+    ScopeVersionPublication("v0.7.0", "2023-04-29"),
+    ScopeVersionPublication("v0.8.0", "2023-07-02"),
+    ScopeVersionPublication("v0.9.0", "2023-09-10"),
+    ScopeVersionPublication("v0.10.0", "2024-02-04"),
+    ScopeVersionPublication("v0.11.0", "2024-02-10"),
+    ScopeVersionPublication("v0.12.0", "2024-03-06"),
+    ScopeVersionPublication("v0.13.0", "2024-03-22"),
+    ScopeVersionPublication("v0.13.1", "2024-03-30"),
+    ScopeVersionPublication("v0.14.0", "2024-04-15"),
+    ScopeVersionPublication("v0.14.1", "2024-04-29"),
+    ScopeVersionPublication("v0.15.0", "2024-05-08"),
+    ScopeVersionPublication("v0.16.0", "2024-05-28"),
+    ScopeVersionPublication("v0.16.1", "2024-05-28"),
+    ScopeVersionPublication("v0.16.2", "2024-07-22"),
+    ScopeVersionPublication("v0.17.0", "2024-08-05"),
+    ScopeVersionPublication("v0.18.0", "2024-08-21"),
+    ScopeVersionPublication("v0.18.1", "2024-08-27"),
+    ScopeVersionPublication("v0.19.0", "2025-02-22"),
+    ScopeVersionPublication("v0.20.0", "2025-03-02"),
+    ScopeVersionPublication("v0.21.0", "2025-08-03"),
+)
+
+
+# %% [markdown]
 # ### Timeline event type
 #
 # Each export row uses a fixed set of columns for inspection and document lookup.
@@ -3145,6 +3203,99 @@ def _timeline_study_enrollment_event(
     )
 
 
+def _timeline_study_end_event(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> Optional[TimelineEvent]:
+    status_end = scope.enums.DepressionTreatmentStatus.End.value
+    profiles = documents.filter_match(
+        match_type="profile",
+        match_deleted=False,
+    )
+    for revision_group in profiles.group_revisions().values():
+        for revision in revision_group.order_by_revision():
+            if revision.get("depressionTreatmentStatus") != status_end:
+                continue
+
+            return _timeline_event(
+                record_id=record_id,
+                patient_id=patient_id,
+                timeline_date=datetime_from_document(document=revision).strftime(
+                    "%Y-%m-%d"
+                ),
+                timeline_event="studyEnd",
+                source_set_id=None,
+                source_doc_id=str(revision["_id"]),
+                source_rev=int(revision["_rev"]),
+            )
+
+    return None
+
+
+def _timeline_study_status_events(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> List[TimelineEvent]:
+    status_end = scope.enums.DepressionTreatmentStatus.End.value
+    events: List[TimelineEvent] = []
+    profiles = documents.filter_match(match_type="profile")
+    for revision_group in profiles.group_revisions().values():
+        prior_revision = None
+        for revision in revision_group.order_by_revision():
+            status_current = revision.get("depressionTreatmentStatus")
+            status_prior = (
+                None
+                if prior_revision is None
+                else prior_revision.get("depressionTreatmentStatus")
+            )
+            if (
+                status_current != status_prior
+                and status_current is not None
+                and status_current != status_end
+            ):
+                events.append(
+                    _timeline_event(
+                        record_id=record_id,
+                        patient_id=patient_id,
+                        timeline_date=datetime_from_document(
+                            document=revision
+                        ).strftime("%Y-%m-%d"),
+                        timeline_event="studyStatus",
+                        source_set_id=None,
+                        source_doc_id=str(revision["_id"]),
+                        source_rev=int(revision["_rev"]),
+                        timeline_data={
+                            "depressionTreatmentStatus": status_current,
+                        },
+                    )
+                )
+            prior_revision = revision
+    return events
+
+
+def _timeline_version_published_events(
+    *,
+    patient_id: str,
+    record_id: str,
+) -> List[TimelineEvent]:
+    return [
+        _timeline_event(
+            record_id=record_id,
+            patient_id=patient_id,
+            timeline_date=publication.published_date,
+            timeline_event="versionPublished",
+            source_doc_id=f"scope-web:{publication.version}",
+            source_rev=0,
+            timeline_data={"version": publication.version},
+        )
+        for publication in SCOPE_VERSION_PUBLICATIONS
+    ]
+
+
 def _timeline_value_lifecycle_events(
     *,
     patient_id: str,
@@ -3200,11 +3351,6 @@ def timeline_documents_from_documentset(
     """
 
     record_id = patient_id_to_record_id.get(patient_id, "")
-
-    # def _timeline_study_end_event(...) -> Optional[StudyEndTimelineEvent]:
-    # def _timeline_study_end_scheduled_event(
-    #     enrollment: StudyEnrollmentTimelineEvent,
-    # ) -> StudyEndScheduledTimelineEvent:
 
     timeline_events: List[TimelineEvent] = []
     timeline_events.extend(
@@ -3271,10 +3417,30 @@ def timeline_documents_from_documentset(
         )
     )
     timeline_events.extend(
+        _timeline_study_status_events(
+            patient_id=patient_id,
+            record_id=record_id,
+            documents=document_set,
+        )
+    )
+    study_end_event = _timeline_study_end_event(
+        patient_id=patient_id,
+        record_id=record_id,
+        documents=document_set,
+    )
+    if study_end_event is not None:
+        timeline_events.append(study_end_event)
+    timeline_events.extend(
         _timeline_value_lifecycle_events(
             patient_id=patient_id,
             record_id=record_id,
             documents=document_set,
+        )
+    )
+    timeline_events.extend(
+        _timeline_version_published_events(
+            patient_id=patient_id,
+            record_id=record_id,
         )
     )
 
