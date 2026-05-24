@@ -2823,6 +2823,46 @@ def _timeline_event(
     )
 
 
+def _timeline_activity_lifecycle_events(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> List[TimelineEvent]:
+    events: List[TimelineEvent] = []
+    activities = documents.filter_match(match_type="activity")
+    for revision_group in activities.group_revisions().values():
+        for revision in revision_group.order_by_revision():
+            if revision.get("_deleted", False):
+                timeline_event = "activityDelete"
+                # Delete revisions are set-tombstone documents with no editedDateTime.
+                timeline_date = datetime_from_document(document=revision).strftime(
+                    "%Y-%m-%d"
+                )
+            elif revision["_rev"] == 1:
+                timeline_event = "activityCreate"
+                timeline_date = _timeline_date_from_recorded_datetime(
+                    recorded_datetime=str(revision["editedDateTime"]),
+                )
+            else:
+                timeline_event = "activityEdit"
+                timeline_date = _timeline_date_from_recorded_datetime(
+                    recorded_datetime=str(revision["editedDateTime"]),
+                )
+
+            events.append(
+                _timeline_event(
+                    record_id=record_id,
+                    patient_id=patient_id,
+                    timeline_date=timeline_date,
+                    timeline_event=timeline_event,
+                    source_doc_id=str(revision["_id"]),
+                    source_set_id=str(revision["_set_id"]),
+                )
+            )
+    return events
+
+
 def _timeline_activity_log_events(
     *,
     patient_id: str,
@@ -2851,6 +2891,46 @@ def _timeline_activity_log_events(
         )
         for document in activity_logs.documents
     ]
+
+
+def _timeline_activity_schedule_lifecycle_events(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> List[TimelineEvent]:
+    events: List[TimelineEvent] = []
+    activity_schedules = documents.filter_match(match_type="activitySchedule")
+    for revision_group in activity_schedules.group_revisions().values():
+        for revision in revision_group.order_by_revision():
+            if revision.get("_deleted", False):
+                timeline_event = "activityScheduleDelete"
+                # Delete revisions are set-tombstone documents with no editedDateTime.
+                timeline_date = datetime_from_document(document=revision).strftime(
+                    "%Y-%m-%d"
+                )
+            elif revision["_rev"] == 1:
+                timeline_event = "activityScheduleCreate"
+                timeline_date = _timeline_date_from_recorded_datetime(
+                    recorded_datetime=str(revision["editedDateTime"]),
+                )
+            else:
+                timeline_event = "activityScheduleEdit"
+                timeline_date = _timeline_date_from_recorded_datetime(
+                    recorded_datetime=str(revision["editedDateTime"]),
+                )
+
+            events.append(
+                _timeline_event(
+                    record_id=record_id,
+                    patient_id=patient_id,
+                    timeline_date=timeline_date,
+                    timeline_event=timeline_event,
+                    source_doc_id=str(revision["_id"]),
+                    source_set_id=str(revision["_set_id"]),
+                )
+            )
+    return events
 
 
 def _timeline_assessment_log_by_patient_events(
@@ -2991,6 +3071,46 @@ def _timeline_study_enrollment_event(
     )
 
 
+def _timeline_value_lifecycle_events(
+    *,
+    patient_id: str,
+    record_id: str,
+    documents: document_set.DocumentSet,
+) -> List[TimelineEvent]:
+    events: List[TimelineEvent] = []
+    values = documents.filter_match(match_type="value")
+    for revision_group in values.group_revisions().values():
+        for revision in revision_group.order_by_revision():
+            if revision.get("_deleted", False):
+                timeline_event = "valueDelete"
+                # Delete revisions are set-tombstone documents with no editedDateTime.
+                timeline_date = datetime_from_document(document=revision).strftime(
+                    "%Y-%m-%d"
+                )
+            elif revision["_rev"] == 1:
+                timeline_event = "valueCreate"
+                timeline_date = _timeline_date_from_recorded_datetime(
+                    recorded_datetime=str(revision["editedDateTime"]),
+                )
+            else:
+                timeline_event = "valueEdit"
+                timeline_date = _timeline_date_from_recorded_datetime(
+                    recorded_datetime=str(revision["editedDateTime"]),
+                )
+
+            events.append(
+                _timeline_event(
+                    record_id=record_id,
+                    patient_id=patient_id,
+                    timeline_date=timeline_date,
+                    timeline_event=timeline_event,
+                    source_doc_id=str(revision["_id"]),
+                    source_set_id=str(revision["_set_id"]),
+                )
+            )
+    return events
+
+
 # %% [markdown]
 # ### Transform: timeline_documents_from_documentset
 
@@ -3013,7 +3133,21 @@ def timeline_documents_from_documentset(
 
     timeline_events: List[TimelineEvent] = []
     timeline_events.extend(
+        _timeline_activity_lifecycle_events(
+            patient_id=patient_id,
+            record_id=record_id,
+            documents=document_set,
+        )
+    )
+    timeline_events.extend(
         _timeline_activity_log_events(
+            patient_id=patient_id,
+            record_id=record_id,
+            documents=document_set,
+        )
+    )
+    timeline_events.extend(
+        _timeline_activity_schedule_lifecycle_events(
             patient_id=patient_id,
             record_id=record_id,
             documents=document_set,
@@ -3049,6 +3183,13 @@ def timeline_documents_from_documentset(
     )
     timeline_events.append(
         _timeline_study_enrollment_event(
+            patient_id=patient_id,
+            record_id=record_id,
+            documents=document_set,
+        )
+    )
+    timeline_events.extend(
+        _timeline_value_lifecycle_events(
             patient_id=patient_id,
             record_id=record_id,
             documents=document_set,
